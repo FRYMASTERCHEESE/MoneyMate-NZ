@@ -22,9 +22,65 @@ import com.google.android.ump.*;
 
 public final class MainActivity extends Activity {
     private Store store; private LinearLayout root, content; private AdView ad;
-    private final int ink=Color.rgb(20,41,40), green=Color.rgb(6,120,91);
+    private int ink=ThemeConfig.DEFAULT.ink, green=ThemeConfig.DEFAULT.accent;
+    private int canvasColor=ThemeConfig.DEFAULT.background, heroColor=ThemeConfig.DEFAULT.hero;
+    private String tagline=ThemeConfig.DEFAULT.tagline;
+    private String currentPage="Home";
+    private long lastThemeCheck=0L;
+    private static final String THEME_URL="https://frymastercheese.github.io/MoneyMate-NZ/app-theme.json";
+    private static final String THEME_KEY="remote_theme_v1";
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
+        super.onCreate(state); store=new Store(this);
+        try {
+            applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
+        }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
+        store.postDueRecurring(); show("Home");
+        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
+    }
+    private void applyTheme(ThemeConfig config) {
+        ink=config.ink;green=config.accent;canvasColor=config.background;
+        heroColor=config.hero;tagline=config.tagline;
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        // Automatically check the public theme on launch/return, no account or financial data upload.
+        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
+           System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
+    }
+    private void refreshTheme(boolean userRequested) {
+        lastThemeCheck=System.currentTimeMillis();
+        new Thread(()->{
+            java.net.HttpURLConnection conn=null;
+            try {
+                conn=(java.net.HttpURLConnection)new java.net.URL(THEME_URL).openConnection();
+                conn.setConnectTimeout(3500);conn.setReadTimeout(3500);
+                conn.setRequestProperty("Cache-Control","no-cache");
+                if(conn.getResponseCode()!=200)throw new java.io.IOException("Theme service unavailable");
+                java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
+                try(java.io.InputStream input=conn.getInputStream()) {
+                    byte[] chunk=new byte[1024];int n;
+                    while((n=input.read(chunk))!=-1) {
+                        if(buf.size()+n>8192)throw new java.io.IOException("Theme file too large");
+                        buf.write(chunk,0,n);
+                    }
+                }
+                String payload=new String(buf.toByteArray(),java.nio.charset.StandardCharsets.UTF_8);
+                ThemeConfig downloaded=ThemeConfig.parse(payload);
+                runOnUiThread(()->{
+                    if(isFinishing()||isDestroyed())return;
+                    String old=getPreferences(MODE_PRIVATE).getString(THEME_KEY,"");
+                    if(!payload.equals(old)) {
+                        getPreferences(MODE_PRIVATE).edit().putString(THEME_KEY,payload).apply();
+                        applyTheme(downloaded);
+                        show(currentPage);
+                        if(userRequested)Toast.makeText(this,"Design updated",Toast.LENGTH_SHORT).show();
+                    } else if(userRequested)Toast.makeText(this,"Design is up to date",Toast.LENGTH_SHORT).show();
+                });
+            }catch(Exception error) {
+                if(userRequested)runOnUiThread(()->Toast.makeText(this,
+                    "Could not check design. Your saved theme still works offline.",Toast.LENGTH_LONG).show());
+            }finally{if(conn!=null)conn.disconnect();}
+        },"MoneyMateTheme").start();
     }
     private int dp(float n) {return Math.round(n*getResources().getDisplayMetrics().density);}
     private android.graphics.drawable.GradientDrawable surface(int color,int radius) {
@@ -56,14 +112,15 @@ public final class MainActivity extends Activity {
         l.addView(text(heading,20,true));l.addView(text(detail,14,false));content.addView(l);
     }
     private void show(String page) {
-        LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(0xfff5f6ef);
+        currentPage=page;
+        LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(canvasColor);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         setContentView(frame);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         root=new LinearLayout(this);root.setOrientation(1);root.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(root);
         TextView brand=text("◈  MoneyMate NZ",24,true);root.addView(brand);
-        TextView subtitle=text("A little clarity. A little more confidence.",13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
+        TextView subtitle=text(tagline,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
@@ -85,7 +142,7 @@ public final class MainActivity extends Activity {
     private void home() {
         title(YearMonth.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy",java.util.Locale.forLanguageTag("en-NZ"))));
         long in=store.sum("Income",month()),out=store.sum("Expense",month());
-        LinearLayout balance=card();balance.setBackground(surface(0xff123f35,24));
+        LinearLayout balance=card();balance.setBackground(surface(heroColor,24));
         TextView label=text("AVAILABLE THIS MONTH · NZD",12,true);label.setTextColor(0xffbce7d6);balance.addView(label);
         TextView amount=text(MoneyMath.format(MoneyMath.remaining(in,out)),38,true);amount.setTextColor(Color.WHITE);balance.addView(amount);
         TextView totals=text("Income  "+MoneyMath.format(in)+"\nSpent    "+MoneyMath.format(out),16,false);totals.setTextColor(Color.WHITE);balance.addView(totals);content.addView(balance);
@@ -257,6 +314,8 @@ public final class MainActivity extends Activity {
             i.setType("application/json");
             startActivityForResult(i,102);
         }));
+        content.addView(button("↻ Refresh app colours & text",()->refreshTheme(true)));
+        line("Colour and tagline changes published to the MoneyMate NZ website can appear here without a new APK. New features still need an app update.");
         content.addView(button("Advertising privacy choices",()->{
             UserMessagingPlatform.showPrivacyOptionsForm(this,error->{
                 if(error!=null)Toast.makeText(this,"Choices unavailable: "+error.getMessage(),Toast.LENGTH_LONG).show();
