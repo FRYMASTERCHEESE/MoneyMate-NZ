@@ -19,6 +19,10 @@ final class AuthClient {
     }
     AuthClient(Transport transport){this.transport=transport;vault=null;}
     static boolean configured(){return !BuildConfig.SUPABASE_URL.isEmpty()&&!BuildConfig.SUPABASE_KEY.isEmpty();}
+    static final class HttpFailure extends IOException {
+        final int status;
+        HttpFailure(int status,String message){super(message);this.status=status;}
+    }
     synchronized String userId(){return session==null?null:session.optJSONObject("user").optString("id");}
     synchronized String email(){return session==null?"":session.optJSONObject("user").optString("email");}
     private void validateSession(JSONObject value) throws Exception {
@@ -70,6 +74,16 @@ final class AuthClient {
         // Reauthenticate without replacing the current session; server checks the password too.
         transport.call("/functions/v1/delete-account","POST",new JSONObject().put("password",password),accessToken());
     }
+    boolean validateOnline() {
+        try {
+            String expected=userId();if(expected==null)return true;
+            JSONObject user=transport.call("/auth/v1/user","GET",null,accessToken());
+            return expected.equals(user.getString("id"));
+        } catch(HttpFailure error) {
+            // A definite invalid/revoked session locks the retained database. Offline errors do not.
+            return !(error.status==400||error.status==401||error.status==403);
+        } catch(Exception offline) {return true;}
+    }
     static void checkPassword(String password) {
         if(password.length()<12||password.length()>128)throw new IllegalArgumentException("Use a password of 12–128 characters");
     }
@@ -83,14 +97,14 @@ final class AuthClient {
             connection.setInstanceFollowRedirects(false);connection.setConnectTimeout(10000);connection.setReadTimeout(15000);
             connection.setRequestMethod(method);connection.setRequestProperty("apikey",BuildConfig.SUPABASE_KEY);
             if(bearer!=null)connection.setRequestProperty("Authorization","Bearer "+bearer);
-            connection.setRequestProperty("Content-Type","application/json");connection.setDoOutput(true);
-            try(OutputStream output=connection.getOutputStream()){output.write(body.toString().getBytes(StandardCharsets.UTF_8));}
+            connection.setRequestProperty("Content-Type","application/json");
+            if(body!=null){connection.setDoOutput(true);try(OutputStream output=connection.getOutputStream()){output.write(body.toString().getBytes(StandardCharsets.UTF_8));}}
             int status=connection.getResponseCode();
             if(status<200||status>=300) {
                 // Never surface response bodies, credentials, or tokens in logs/UI.
                 if(status==429)throw new IOException("Too many attempts. Wait before trying again.");
                 if(status>=500)throw new IOException("Account service unavailable. Try again later.");
-                throw new IOException("Request unsuccessful. Check your details or request a fresh email code.");
+                throw new HttpFailure(status,"Request unsuccessful. Check your details or request a fresh email code.");
             }
             try(InputStream input=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()) {
                 byte[] block=new byte[4096];int count;

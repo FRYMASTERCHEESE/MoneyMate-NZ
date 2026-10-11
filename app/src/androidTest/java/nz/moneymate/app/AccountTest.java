@@ -64,4 +64,10 @@ public class AccountTest {
         client.signup("test@example.invalid","a long test password");assertNull(client.userId());
         client.signin("test@example.invalid","secret");try{client.deleteAccount("secret");fail("Expected failure");}catch(java.io.IOException expected){}assertEquals(A,client.userId());
     }
+    @Test public void onlineValidationDistinguishesRevokedSessionFromOffline() throws Exception {
+        AuthClient offline=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new java.io.IOException("offline");});
+        offline.signin("test@example.invalid","secret");assertTrue(offline.validateOnline());
+        AuthClient revoked=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new AuthClient.HttpFailure(401,"revoked");});
+        revoked.signin("test@example.invalid","secret");assertFalse(revoked.validateOnline());
+    }
 }

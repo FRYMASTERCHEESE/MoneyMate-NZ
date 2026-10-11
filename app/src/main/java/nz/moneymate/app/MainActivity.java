@@ -33,6 +33,7 @@ public final class MainActivity extends Activity {
     private boolean accountBusy=false;
     private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private String documentOwner;
+    private long lastAccountCheck;
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
@@ -47,6 +48,13 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onResume() {
         super.onResume();
+        if(auth.userId()!=null&&AuthClient.configured()&&!accountBusy&&System.currentTimeMillis()-lastAccountCheck>60000L) {
+            lastAccountCheck=System.currentTimeMillis();final Store checked=store;
+            accountWorker.execute(()->{
+                boolean valid=auth.validateOnline();
+                if(!valid)runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()&&!accountBusy&&store==checked){auth.clear();switchProfile();message("Your account session ended. Sign in again to open its retained local records.");}});
+            });
+        }
         // Automatically check the public theme on launch/return, no account or financial data upload.
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
@@ -426,6 +434,7 @@ public final class MainActivity extends Activity {
         });
     }
     private void message(String value){new AlertDialog.Builder(this).setMessage(value).setPositiveButton("OK",null).show();}
+    @Override public void onBackPressed(){if(!accountBusy)super.onBackPressed();}
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
         if(code>=100&&code<=102&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}

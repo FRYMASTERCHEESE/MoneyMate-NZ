@@ -15,8 +15,20 @@ export function createHandler({ url, adminKey, origin, request }) {
     const authorization = req.headers.get('authorization') || '';
     if (!/^Bearer [A-Za-z0-9._-]+$/.test(authorization)) return reply(401, 'Sign in required');
     try {
-      const text = await req.text();
-      if (text.length > 2048) return reply(413, 'Request too large');
+      // Bound bytes before parsing so an unauthenticated caller cannot force a huge allocation.
+      if (Number(req.headers.get('content-length')) > 2048) return reply(413, 'Request too large');
+      const reader = req.body?.getReader();
+      if (!reader) return reply(400, 'Invalid request');
+      const chunks = []; let size = 0;
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break;
+        size += value.length;
+        if (size > 2048) { await reader.cancel(); return reply(413, 'Request too large'); }
+        chunks.push(value);
+      }
+      const bytes = new Uint8Array(size); let offset = 0;
+      for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
+      const text = new TextDecoder().decode(bytes);
       let body;
       try { body = JSON.parse(text); } catch { return reply(400, 'Invalid request'); }
       if (typeof body?.password !== 'string' || body.password.length === 0 || body.password.length > 128 || Object.keys(body).some(k => k !== 'password'))

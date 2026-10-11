@@ -12,7 +12,7 @@ A native, offline-first Android budget tracker designed for New Zealand.
 - Dated bills list with upcoming bills dashboard
 - Transaction deletion with confirmation
 - CSV transaction export through Android's file picker
-- On-device SQLite storage; no account or paid backend
+- On-device SQLite storage with optional Supabase accounts and separate local profiles
 - Google AdMob sample ads gated by Google UMP consent eligibility
 - Android API 36 target, CI build workflow and JUnit money tests
 
@@ -32,7 +32,7 @@ CI provisions Gradle and Android SDK automatically.
 
 ## Privacy and advertising
 
-Data stays on the phone unless a user explicitly exports it. AdMob can transmit device/ad-related information to Google; the sample advertising IDs MUST be replaced before release. See [privacy notice draft](docs/PRIVACY.md) and [release checklist](docs/PLAY_RELEASE.md).
+Financial records stay on the phone unless exported. Account email, credentials and security events are processed by Supabase and the configured email provider. AdMob can transmit device/ad-related information to Google; sample ad IDs MUST be replaced before release. See [privacy notice](docs/PRIVACY.md) and [release checklist](docs/PLAY_RELEASE.md).
 
 ## Not yet included
 
@@ -41,7 +41,6 @@ This is an **MVP**, not a finished Play Store submission. Push notifications and
 ## Application ID
 
 `nz.moneymate.app`
-# Accounts (0.3.0)
+## Accounts (0.3.0)
 
 Optional Supabase email/password accounts with email-code confirmation, reset, sign-out, encrypted session storage, separate offline local profiles and account deletion. Existing local records are preserved. Accounts do not sync financial records. See [account setup](docs/ACCOUNTS_SETUP.md) for exact project, SMTP, public build configuration, deletion deployment and Play publication requirements. Blank configuration keeps local budgeting available.
-
