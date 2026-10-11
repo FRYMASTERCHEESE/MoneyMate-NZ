@@ -24,7 +24,7 @@ public final class MainActivity extends Activity {
     private Store store; private LinearLayout root, content; private AdView ad;
     private final int ink=Color.rgb(20,41,40), green=Color.rgb(6,120,91);
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); initAds();
+        super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
     private int dp(float n) {return Math.round(n*getResources().getDisplayMetrics().density);}
     private android.graphics.drawable.GradientDrawable surface(int color,int radius) {

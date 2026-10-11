@@ -30,7 +30,7 @@ The new private test key is stored only as the encrypted Actions secret `MONEYMA
 
 ## Verification and limits
 
-CI runs the money unit tests, builds a debug APK and unsigned release AAB, installs the app on an Android 15 emulator, opens the empty and sample-data screens, navigates all sections, verifies transaction totals and performs a full JSON backup/restore round trip including budgets, goals, bills and recurring entries. Screenshots use fabricated financial data. An actual upgrade of your phone has not been tested.
+CI runs the money unit tests, builds a debug APK and unsigned release AAB, installs the app on an Android 15 emulator, opens the empty and sample-data screens, navigates all sections, verifies transaction totals and performs a full JSON backup/restore round trip including budgets, goals, bills and recurring entries. Screenshots use fabricated financial data. A debug-only capture flag hides the sample advertising banner while taking store images; normal app launches still follow the existing consent and ad flow. An actual upgrade of your phone has not been tested.
 
 The release AAB remains unsigned and the app still uses Google's sample ad identifiers. These outputs are for testing, not a complete Play release.
 

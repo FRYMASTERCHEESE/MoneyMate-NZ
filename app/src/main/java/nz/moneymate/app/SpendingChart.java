@@ -17,8 +17,8 @@ final class SpendingChart extends View {
         float start=-90;RectF ring=new RectF(cx-r,cy-r,cx+r,cy+r);
         for(int i=0;i<amounts.size();i++){float sweep=(float)(amounts.get(i)*360.0/total);paint.setColor(COLORS[i%COLORS.length]);canvas.drawArc(ring,start,sweep,false,paint);start+=sweep;}
         paint.setStyle(Paint.Style.FILL);paint.setTextAlign(Paint.Align.CENTER);paint.setColor(0xff142928);
-        paint.setTextSize(14*getResources().getDisplayMetrics().scaledDensity);canvas.drawText("TOTAL SPENT",cx,cy-12,paint);
+        paint.setTextSize(14*getResources().getDisplayMetrics().scaledDensity);canvas.drawText("TOTAL SPENT",cx,cy-18*getResources().getDisplayMetrics().density,paint);
         paint.setTypeface(Typeface.create(Typeface.DEFAULT,Typeface.BOLD));paint.setTextSize(22*getResources().getDisplayMetrics().scaledDensity);
-        canvas.drawText(MoneyMath.format(total),cx,cy+24,paint);
+        canvas.drawText(MoneyMath.format(total),cx,cy+18*getResources().getDisplayMetrics().density,paint);
     }
 }

@@ -21,7 +21,7 @@ public class VisualTest {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();Context ctx=inst.getTargetContext();
         ctx.deleteDatabase("moneymate.db");
         UiDevice device=UiDevice.getInstance(inst);device.setOrientationNatural();
-        Intent launch=new Intent(ctx,MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent launch=new Intent(ctx,MainActivity.class).putExtra("captureMode",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         android.app.Activity activity=inst.startActivitySync(launch);inst.waitForIdleSync();
         assertTrue(device.wait(Until.hasObject(By.text("Welcome to your money plan")),10000));
         File dir=new File("/sdcard/Download/moneymate-screenshots");device.executeShellCommand("mkdir -p "+dir);
