@@ -71,11 +71,12 @@ public final class MainActivity extends Activity {
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(0);
+        final View[] selectedTab=new View[1];
         for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
-            nav.setTextColor(tab.equals(page)?Color.WHITE:ink);links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
+            nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
-        tabs.addView(links);frame.addView(tabs);
+        tabs.addView(links);frame.addView(tabs);tabs.post(()->tabs.scrollTo(Math.max(0,selectedTab[0].getLeft()-dp(16)),0));
         if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
     }
     private void title(String s) {content.addView(text(s,23,true));}

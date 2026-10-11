@@ -34,9 +34,10 @@ jobs:
           TEST_KEYSTORE: ${{ secrets.MONEYMATE_TEST_KEYSTORE }}
         run: |
           if [ -n "$TEST_KEYSTORE" ]; then
-            mkdir -p "$HOME/.android"
-            printf '%s' "$TEST_KEYSTORE" | base64 --decode > "$HOME/.android/debug.keystore"
-            chmod 600 "$HOME/.android/debug.keystore"
+            printf '%s' "$TEST_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/moneymate-test.p12"
+            chmod 600 "$RUNNER_TEMP/moneymate-test.p12"
+            echo "MONEYMATE_TEST_KEYSTORE_PATH=$RUNNER_TEMP/moneymate-test.p12" >> "$GITHUB_ENV"
+            keytool -list -keystore "$RUNNER_TEMP/moneymate-test.p12" -storetype PKCS12 -storepass android -alias androiddebugkey
           else
             echo 'Signing secret unavailable: this run uses an ephemeral debug key.'
           fi
