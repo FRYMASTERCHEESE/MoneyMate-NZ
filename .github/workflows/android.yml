@@ -25,6 +25,17 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.13'
+      - name: Restore persistent test signing key
+        env:
+          TEST_KEYSTORE: ${{ secrets.MONEYMATE_TEST_KEYSTORE }}
+        run: |
+          if [ -n "$TEST_KEYSTORE" ]; then
+            mkdir -p "$HOME/.android"
+            printf '%s' "$TEST_KEYSTORE" | base64 --decode > "$HOME/.android/debug.keystore"
+            chmod 600 "$HOME/.android/debug.keystore"
+          else
+            echo 'Signing secret unavailable: this run uses an ephemeral debug key.'
+          fi
       - name: Run tests and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease
       - name: Enable emulator acceleration
