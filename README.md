@@ -36,7 +36,7 @@ Data stays on the phone unless a user explicitly exports it. AdMob can transmit 
 
 ## Not yet included
 
-This is an **MVP**, not a finished Play Store submission. Recurring entries, push notifications, comprehensive backup/restore, CSV import, richer graphs, fully styled UI, production AdMob/UMP setup, screenshots and store graphics need further development. The Play Console review and signing key also remain outstanding. Never commit secrets or signing keys.
+This is an **MVP**, not a finished Play Store submission. Push notifications and CSV import, production AdMob/UMP setup and release signing still need further development. See [0.2.0 test update and safe installation](docs/TEST_UPDATE.md) for the visual update, store graphics and signing limitations. The Play Console review and signing key also remain outstanding. Never commit secrets or signing keys.
 
 ## Application ID
 

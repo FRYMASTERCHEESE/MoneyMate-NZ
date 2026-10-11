@@ -39,7 +39,7 @@ public class VisualTest {
             data.addRecurring("Expense","Internet","Example data",8500,LocalDate.now().plusDays(10).toString(),"Monthly");
         }
         activity=inst.startActivitySync(launch);inst.waitForIdleSync();
-        assertTrue(device.wait(Until.hasObject(By.text("AVAILABLE THIS MONTH Ã‚Â· NZD")),10000));
+        assertTrue(device.wait(Until.hasObject(By.textStartsWith("AVAILABLE THIS MONTH")),10000));
         capture(device,dir,"02-home.png");
         new UiScrollable(new UiSelector().className("android.widget.ScrollView")).scrollIntoView(new UiSelector().textContains("Rent   "));
         capture(device,dir,"03-spending.png");
