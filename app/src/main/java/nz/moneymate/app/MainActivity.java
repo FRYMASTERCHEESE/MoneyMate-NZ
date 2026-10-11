@@ -22,65 +22,91 @@ import com.google.android.ump.*;
 
 public final class MainActivity extends Activity {
     private Store store; private LinearLayout root, content; private AdView ad;
+    private String activePage="Home";
     private final int ink=Color.rgb(20,41,40), green=Color.rgb(6,120,91);
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); initAds();
     }
+    private int dp(float n) {return Math.round(n*getResources().getDisplayMetrics().density);}
+    private android.graphics.drawable.GradientDrawable surface(int color,int radius) {
+        android.graphics.drawable.GradientDrawable d=new android.graphics.drawable.GradientDrawable();
+        d.setColor(color);d.setCornerRadius(dp(radius));return d;
+    }
     private TextView text(String s,int size,boolean bold) {
         TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(ink);
-        t.setPadding(16,13,16,13); if(bold)t.setTypeface(null,Typeface.BOLD);return t;
+        t.setPadding(dp(16),dp(12),dp(16),dp(12));if(bold)t.setTypeface(null,Typeface.BOLD);return t;
     }
     private Button button(String name,Runnable act) {
-        Button b=new Button(this); b.setText(name);b.setAllCaps(false);b.setOnClickListener(v->act.run());return b;
+        Button b=new Button(this);b.setText(name);b.setTextSize(14);b.setAllCaps(false);
+        b.setTextColor(Color.WHITE);b.setPadding(dp(16),dp(12),dp(16),dp(12));b.setMinHeight(dp(52));
+        b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x33000000),surface(green,16),null));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(4),dp(5),dp(4),dp(5));b.setLayoutParams(lp);
+        b.setOnClickListener(v->act.run());return b;
+    }
+    private LinearLayout card() {
+        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(8),dp(8),dp(8),dp(8));
+        l.setBackground(surface(Color.WHITE,24));l.setElevation(dp(2));
+        LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(4),dp(8),dp(4),dp(12));l.setLayoutParams(lp);return l;
+    }
+    private void empty(String heading,String detail) {
+        LinearLayout l=card();Illustration art=new Illustration(this);l.addView(art,new LinearLayout.LayoutParams(-1,dp(130)));
+        l.addView(text(heading,20,true));l.addView(text(detail,14,false));content.addView(l);
     }
     private void show(String page) {
-        ScrollView scroll=new ScrollView(this); root=new LinearLayout(this); root.setOrientation(1);
-        root.setPadding(16,24,16,24);root.setBackgroundColor(Color.rgb(246,250,248));
-        scroll.addView(root); setContentView(scroll);
-        root.addView(text("MoneyMate NZ",30,true));
-        root.addView(text("Your money. Your plan. Private by default.",13,false));
-        HorizontalScrollView tabs=new HorizontalScrollView(this); LinearLayout links=new LinearLayout(this);links.setOrientation(0);
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export"}) links.addView(button(tab,()->show(tab)));
-        tabs.addView(links);root.addView(tabs);
+        activePage=page;
+        LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(0xfff5f6ef);
+        frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
+        setContentView(frame);
+        ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
+        frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        root=new LinearLayout(this);root.setOrientation(1);root.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(root);
+        TextView brand=text("◈  MoneyMate NZ",24,true);root.addView(brand);
+        TextView subtitle=text("A little clarity. A little more confidence.",13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
-            case "Transactions": transactions();break;
-            case "Budgets": budgets();break;
-            case "Goals": goals();break;
-            case "Bills": bills();break;
-            case "Export": exports();break;
-            default: home();
+            case "Transactions": transactions();break;case "Budgets": budgets();break;
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;default: home();
         }
-        if(ad!=null) { if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad); }
+        HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
+        LinearLayout links=new LinearLayout(this);links.setOrientation(0);
+        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export"}) {
+            Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
+            nav.setTextColor(tab.equals(page)?Color.WHITE:ink);links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
+        }
+        tabs.addView(links);frame.addView(tabs);
+        if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
     }
     private void title(String s) {content.addView(text(s,23,true));}
-    private void line(String s) { content.addView(text(s,16,false)); }
+    private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
     private String month() {return YearMonth.now().toString();}
     private void home() {
         title("This month · "+month());
         long in=store.sum("Income",month()),out=store.sum("Expense",month());
-        line("Income: "+MoneyMath.format(in));
-        line("Expenses: "+MoneyMath.format(out));
-        line("Remaining: "+MoneyMath.format(MoneyMath.remaining(in,out)));
+        LinearLayout balance=card();balance.setBackground(surface(0xff123f35,24));
+        TextView label=text("AVAILABLE THIS MONTH · NZD",12,true);label.setTextColor(0xffbce7d6);balance.addView(label);
+        TextView amount=text(MoneyMath.format(MoneyMath.remaining(in,out)),38,true);amount.setTextColor(Color.WHITE);balance.addView(amount);
+        TextView totals=text("Income  "+MoneyMath.format(in)+"\nSpent    "+MoneyMath.format(out),16,false);totals.setTextColor(Color.WHITE);balance.addView(totals);content.addView(balance);
+        if(in==0&&out==0)empty("Welcome to your money plan","Start with your income, then add expenses as you go. Your financial records stay on this device.");
         content.addView(button("+ Add income",()->transactionForm("Income")));
         content.addView(button("+ Add expense",()->transactionForm("Expense")));
         title("Spending categories");
         try(Cursor c=store.query("SELECT category,SUM(cents) FROM transactions WHERE kind='Expense' AND substr(date,1,7)=? GROUP BY category ORDER BY SUM(cents) DESC",month())) {
-            if(c.getCount()==0)line("No expenses recorded yet.");
-            long largest=0;
-            while(c.moveToNext())largest=Math.max(largest,c.getLong(1));
-            c.moveToPosition(-1);
-            while(c.moveToNext()){
-                line(c.getString(0)+"  ·  "+MoneyMath.format(c.getLong(1)));
-                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
-                p.setMax(100);
-                p.setProgress(largest==0?0:(int)Math.round(c.getLong(1)*100.0/largest));
-                content.addView(p);
+            if(c.getCount()==0)empty("Make spending visible","Add an expense to see your category breakdown here.");
+            java.util.ArrayList<String> names=new java.util.ArrayList<>();java.util.ArrayList<Long> values=new java.util.ArrayList<>();
+            while(c.moveToNext()){names.add(c.getString(0));values.add(c.getLong(1));}
+            if(!values.isEmpty()) {
+                LinearLayout chart=card();chart.addView(new SpendingChart(this,values),new LinearLayout.LayoutParams(-1,dp(220)));
+                long total=0;for(long value:values)total+=value;
+                for(int i=0;i<names.size();i++) {
+                    TextView row=text("●  "+names.get(i)+"   "+MoneyMath.format(values.get(i))+"  ·  "+Math.round(values.get(i)*100.0/total)+"%",14,false);
+                    row.setTextColor(SpendingChart.COLORS[i%SpendingChart.COLORS.length]);chart.addView(row);
+                }
+                content.addView(chart);
             }
         }
         title("Upcoming bills");
         try(Cursor c=store.query("SELECT name,cents,due FROM bills WHERE due>=? ORDER BY due LIMIT 5",LocalDate.now().toString())) {
-            if(c.getCount()==0)line("No upcoming bills.");
+            if(c.getCount()==0)empty("A clear view of what’s next","Add bills and their due dates to plan ahead.");
             while(c.moveToNext())line(c.getString(2)+"  "+c.getString(0)+"  "+MoneyMath.format(c.getLong(1)));
         }
     }
@@ -114,7 +140,7 @@ public final class MainActivity extends Activity {
         content.addView(button("+ Set recurring payment",()->recurringForm()));
         title("Recurring schedules");
         try(Cursor schedule=store.query("SELECT id,kind,category,cents,next_date,frequency FROM recurring ORDER BY next_date")) {
-            if(schedule.getCount()==0)line("No repeating transactions yet.");
+            if(schedule.getCount()==0)empty("Build a steady routine","Schedule regular income or expenses once.");
             while(schedule.moveToNext()) {
                 long id=schedule.getLong(0);
                 String name=schedule.getString(1)+" · "+schedule.getString(2)+" · "+MoneyMath.format(schedule.getLong(3))+" · "+schedule.getString(5)+" · next "+schedule.getString(4);
@@ -125,7 +151,7 @@ public final class MainActivity extends Activity {
         }
         title("Transaction history");
         try(Cursor c=store.query("SELECT id,date,kind,category,note,cents FROM transactions ORDER BY date DESC,id DESC LIMIT 300")) {
-            if(c.getCount()==0)line("Add your first transaction.");
+            if(c.getCount()==0)empty("Your story starts here","Record your first income or expense.");
             while(c.moveToNext()){
                 long id=c.getLong(0);
                 String s=c.getString(1)+"  "+c.getString(2)+" · "+c.getString(3)+"\n"+c.getString(4)+"   "+MoneyMath.format(c.getLong(5));
@@ -164,11 +190,11 @@ public final class MainActivity extends Activity {
             store.addBudget(v[0],cents);show("Budgets");
         })));
         try(Cursor c=store.query("SELECT b.category,b.cents,COALESCE((SELECT SUM(t.cents) FROM transactions t WHERE t.kind='Expense' AND t.category=b.category AND substr(t.date,1,7)=?),0) FROM budgets b ORDER BY category",month())) {
-            if(c.getCount()==0)line("No budget limits yet.");
+            if(c.getCount()==0)empty("Give every category a plan","Set a monthly limit and follow your progress.");
             while(c.moveToNext()) {
                 long used=c.getLong(2),limit=c.getLong(1);
                 line(c.getString(0)+": "+MoneyMath.format(used)+" / "+MoneyMath.format(limit));
-                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);p.setMax(100);p.setProgress(limit==0?100:(int)Math.min(100,(used*100.0/limit)));content.addView(p);
+                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);p.setProgressTintList(android.content.res.ColorStateList.valueOf(used>limit?0xffb84f38:green));p.setMax(100);p.setProgress(limit==0?100:(int)Math.min(100,(used*100.0/limit)));content.addView(p);
             }
         }
     }
@@ -179,10 +205,13 @@ public final class MainActivity extends Activity {
             store.addGoal(v[0],amount);show("Goals");
         })));
         try(Cursor c=store.query("SELECT id,name,target,saved FROM goals ORDER BY id DESC")) {
-            if(c.getCount()==0)line("No savings goals yet.");
+            if(c.getCount()==0)empty("Make room for something good","Name a goal and start saving towards it.");
             while(c.moveToNext()) {
                 long id=c.getLong(0);String name=c.getString(1);
                 line(name+"  "+MoneyMath.format(c.getLong(3))+" / "+MoneyMath.format(c.getLong(2)));
+                ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+                progress.setProgressTintList(android.content.res.ColorStateList.valueOf(green));progress.setMax(100);
+                progress.setProgress((int)Math.min(100,c.getLong(3)*100.0/c.getLong(2)));content.addView(progress);
                 content.addView(button("+ Add savings to "+name,()->dialog("Add savings",new String[]{"Amount NZD"},new boolean[]{true},v->{
                     long amount=MoneyMath.toCents(v[0]);if(amount<=0)throw new IllegalArgumentException("Positive amount required");
                     store.contribute(id,amount);show("Goals");
@@ -198,7 +227,7 @@ public final class MainActivity extends Activity {
             store.addBill(v[0],amount,date);show("Bills");
         })));
         try(Cursor c=store.query("SELECT name,cents,due FROM bills ORDER BY due")) {
-            if(c.getCount()==0)line("Add your first bill.");
+            if(c.getCount()==0)empty("Stay ahead of due dates","Add your first bill to keep it in view.");
             while(c.moveToNext())line(c.getString(2)+"  ·  "+c.getString(0)+"  ·  "+MoneyMath.format(c.getLong(1)));
         }
     }
