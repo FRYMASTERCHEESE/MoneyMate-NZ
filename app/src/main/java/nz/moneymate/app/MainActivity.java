@@ -24,7 +24,7 @@ public final class MainActivity extends Activity {
     private Store store; private LinearLayout root, content; private AdView ad;
     private final int ink=Color.rgb(20,41,40), green=Color.rgb(6,120,91);
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); store=new Store(this); show("Home"); initAds();
+        super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); initAds();
     }
     private TextView text(String s,int size,boolean bold) {
         TextView t=new TextView(this);t.setText(s);t.setTextSize(size);t.setTextColor(ink);
@@ -102,6 +102,19 @@ public final class MainActivity extends Activity {
         title("Transactions");
         content.addView(button("+ Income",()->transactionForm("Income")));
         content.addView(button("+ Expense",()->transactionForm("Expense")));
+        content.addView(button("+ Set recurring payment",()->recurringForm()));
+        title("Recurring schedules");
+        try(Cursor schedule=store.query("SELECT id,kind,category,cents,next_date,frequency FROM recurring ORDER BY next_date")) {
+            if(schedule.getCount()==0)line("No repeating transactions yet.");
+            while(schedule.moveToNext()) {
+                long id=schedule.getLong(0);
+                String name=schedule.getString(1)+" · "+schedule.getString(2)+" · "+MoneyMath.format(schedule.getLong(3))+" · "+schedule.getString(5)+" · next "+schedule.getString(4);
+                content.addView(button(name+"  (tap to stop)",()->new AlertDialog.Builder(this)
+                    .setTitle("Stop this recurring transaction?").setMessage(name)
+                    .setNegativeButton("Cancel",null).setPositiveButton("Stop",(d,w)->{store.deleteRecurring(id);show("Transactions");}).show()));
+            }
+        }
+        title("Transaction history");
         try(Cursor c=store.query("SELECT id,date,kind,category,note,cents FROM transactions ORDER BY date DESC,id DESC LIMIT 300")) {
             if(c.getCount()==0)line("Add your first transaction.");
             while(c.moveToNext()){
@@ -111,6 +124,29 @@ public final class MainActivity extends Activity {
                   .setMessage(s).setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{store.deleteTransaction(id);show("Transactions");}).show()));
             }
         }
+    }
+    private void recurringForm() {
+        final String[] kinds={"Expense","Income"};
+        final String[] frequencies={"Weekly","Fortnightly","Monthly"};
+        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(24,8,24,8);
+        Spinner kind=new Spinner(this);kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,kinds));l.addView(kind);
+        EditText category=input(l,"Category",false);
+        EditText note=input(l,"Note (optional)",false);
+        EditText amount=input(l,"Amount NZD",true);
+        EditText date=input(l,"First date YYYY-MM-DD",false);date.setText(LocalDate.now().toString());
+        Spinner frequency=new Spinner(this);frequency.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,frequencies));l.addView(frequency);
+        new AlertDialog.Builder(this).setTitle("New repeating transaction").setView(l)
+            .setNegativeButton("Cancel",null).setPositiveButton("Save",(d,w)->{
+                try {
+                    long cents=MoneyMath.toCents(amount.getText().toString());
+                    if(cents<=0||category.getText().toString().trim().isEmpty())throw new IllegalArgumentException("Category and positive amount required");
+                    store.addRecurring(kinds[kind.getSelectedItemPosition()],category.getText().toString().trim(),
+                        note.getText().toString().trim(),cents,
+                        LocalDate.parse(date.getText().toString().trim()).toString(),
+                        frequencies[frequency.getSelectedItemPosition()]);
+                    store.postDueRecurring();show("Transactions");
+                }catch(Exception ex){new AlertDialog.Builder(this).setMessage("Could not save: "+ex.getMessage()).setPositiveButton("OK",null).show();}
+            }).show();
     }
     private void budgets() {
         title("Monthly category budgets");
