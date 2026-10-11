@@ -15,7 +15,7 @@ import java.time.LocalDate;
 public class VisualTest {
     private void capture(UiDevice device,File dir,String name) throws Exception {
         String path=new File(dir,name).toString();device.executeShellCommand("screencap -p "+path);
-        assertEquals("ok",device.executeShellCommand("test -s "+path+" && echo ok").trim());
+        assertTrue(Long.parseLong(device.executeShellCommand("stat -c %s "+path).trim())>1000);
     }
     @Test public void captureRealScreensAndVerifyRecords() throws Exception {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();Context ctx=inst.getTargetContext();
