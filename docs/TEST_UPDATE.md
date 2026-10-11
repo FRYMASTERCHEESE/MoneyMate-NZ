@@ -41,7 +41,15 @@ The release AAB remains unsigned and the app still uses Google's sample ad ident
 Recreate graphics with Pillow:
 
 ```
-python tools/store_assets.py --screenshots screenshots --out store-assets
+python tools/store_assets.py --screenshots store-assets/captures --out store-assets
 ```
 
 Fonts: Segoe UI on Windows, DejaVu Sans on Linux. The promotional example amounts are not promises of financial outcomes. Store graphics do not change the installed app.
+
+## Verified build
+
+[CI run 38183709261](https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions/runs/38183709261) passed for app source `ae06ed33ad0f6dc8f373c4acbccdbd7dc8a24fba`: five money tests, Android 15 screen navigation, full backup/restore, and APK signing verification. APK manifest was checked as version 0.2.0 (2), package `nz.moneymate.app`. The downloaded artifact hashes match GitHub's published hashes.
+
+APK SHA256: `f0171102b98df019e647558e354a0feab199dce828b3a4194cd140ad380e9a52`.
+
+Eight raw emulator captures are in `store-assets/captures/`. Five promotional screenshots, the Play icon, and the feature graphic were visually inspected. Capture provenance is in `store-assets/capture-provenance.json`.
