@@ -52,7 +52,11 @@ public final class MainActivity extends Activity {
             lastAccountCheck=System.currentTimeMillis();final Store checked=store;
             accountWorker.execute(()->{
                 boolean valid=auth.validateOnline();
-                if(!valid)runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()&&!accountBusy&&store==checked){auth.clear();switchProfile();message("Your account session ended. Sign in again to open its retained local records.");}});
+                if(!valid)runOnUiThread(()->{if(!isFinishing()&&!isDestroyed()&&!accountBusy&&store==checked){
+                    auth.clear();
+                    // Recreate also closes any old transaction/restore dialogs so they cannot write to another profile.
+                    Toast.makeText(this,"Session ended. Sign in again to open retained account records.",Toast.LENGTH_LONG).show();recreate();
+                }});
             });
         }
         // Automatically check the public theme on launch/return, no account or financial data upload.
