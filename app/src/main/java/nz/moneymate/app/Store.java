@@ -9,14 +9,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class Store extends SQLiteOpenHelper {
-    public Store(Context c) { super(c, "moneymate.db", null, 1); }
+    public Store(Context c) { super(c, "moneymate.db", null, 2); }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK(kind IN ('Income','Expense')), category TEXT NOT NULL, note TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), date TEXT NOT NULL)");
         db.execSQL("CREATE TABLE budgets (category TEXT PRIMARY KEY, cents INTEGER NOT NULL CHECK(cents >= 0))");
         db.execSQL("CREATE TABLE goals (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, target INTEGER NOT NULL CHECK(target > 0), saved INTEGER NOT NULL DEFAULT 0 CHECK(saved >= 0))");
         db.execSQL("CREATE TABLE bills (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), due TEXT NOT NULL)");
+        db.execSQL("CREATE TABLE recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), next_date TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('Weekly','Fortnightly','Monthly')))");
     }
-    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) { throw new IllegalStateException("Migration required"); }
+    @Override public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
+        if(oldVersion<2)db.execSQL("CREATE TABLE recurring (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL, category TEXT NOT NULL, note TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), next_date TEXT NOT NULL, frequency TEXT NOT NULL CHECK(frequency IN ('Weekly','Fortnightly','Monthly')))");
+    }
     public void addTransaction(String kind, String category, String note, long cents, String date) {
         ContentValues v = new ContentValues(); v.put("kind", kind); v.put("category",category); v.put("note",note); v.put("cents",cents); v.put("date",date);
         getWritableDatabase().insertOrThrow("transactions",null,v);
@@ -51,12 +54,53 @@ public final class Store extends SQLiteOpenHelper {
     }
     private String quote(String s) { return "\"" + s.replace("\"","\"\"") + "\""; }
 
+
+    public void addRecurring(String kind,String category,String note,long cents,String start,String frequency) {
+        if(!java.util.Arrays.asList("Weekly","Fortnightly","Monthly").contains(frequency))
+            throw new IllegalArgumentException("Unsupported frequency");
+        java.time.LocalDate.parse(start);
+        ContentValues v=new ContentValues();
+        v.put("kind",kind);v.put("category",category);v.put("note",note);v.put("cents",cents);v.put("next_date",start);v.put("frequency",frequency);
+        getWritableDatabase().insertOrThrow("recurring",null,v);
+    }
+    public void deleteRecurring(long id) { getWritableDatabase().delete("recurring","id=?",new String[]{Long.toString(id)}); }
+    /** Process missed dates exactly once. Each insertion and next-date advance commits atomically. */
+    public int postDueRecurring() {
+        SQLiteDatabase db=getWritableDatabase();
+        java.time.LocalDate today=java.time.LocalDate.now();
+        int created=0;
+        db.beginTransaction();
+        try(Cursor c=db.rawQuery("SELECT id,kind,category,note,cents,next_date,frequency FROM recurring",null)) {
+            while(c.moveToNext()) {
+                long id=c.getLong(0),cents=c.getLong(4);
+                java.time.LocalDate next=java.time.LocalDate.parse(c.getString(5));
+                String frequency=c.getString(6);
+                int safety=0;
+                while(!next.isAfter(today)&&safety++<1200) {
+                    ContentValues t=new ContentValues();
+                    t.put("kind",c.getString(1));t.put("category",c.getString(2));t.put("note",c.getString(3));
+                    t.put("cents",cents);t.put("date",next.toString());
+                    db.insertOrThrow("transactions",null,t);created++;
+                    switch(frequency) {
+                        case "Weekly":next=next.plusWeeks(1);break;
+                        case "Fortnightly":next=next.plusWeeks(2);break;
+                        case "Monthly":next=next.plusMonths(1);break;
+                        default:throw new IllegalStateException("Invalid recurrence");
+                    }
+                }
+                ContentValues advance=new ContentValues();advance.put("next_date",next.toString());
+                db.update("recurring",advance,"id=?",new String[]{Long.toString(id)});
+            }
+            db.setTransactionSuccessful();
+        } finally { db.endTransaction(); }
+        return created;
+    }
     /** Complete, versioned, locally generated backup. Never uploads financial records. */
     public String backupJson() throws org.json.JSONException {
         org.json.JSONObject backup=new org.json.JSONObject();
         backup.put("format","MoneyMateNZ");
         backup.put("version",1);
-        for(String table:new String[]{"transactions","budgets","goals","bills"}) {
+        for(String table:new String[]{"transactions","budgets","goals","bills","recurring"}) {
             org.json.JSONArray rows=new org.json.JSONArray();
             try(Cursor cursor=query("SELECT * FROM "+table)) {
                 String[] names=cursor.getColumnNames();
@@ -77,7 +121,7 @@ public final class Store extends SQLiteOpenHelper {
         org.json.JSONObject backup=new org.json.JSONObject(json);
         if(!"MoneyMateNZ".equals(backup.optString("format"))||backup.optInt("version")!=1)
             throw new org.json.JSONException("Not a supported MoneyMate NZ backup");
-        String[] tables={"transactions","budgets","goals","bills"};
+        String[] tables={"transactions","budgets","goals","bills","recurring"};
         for(String table:tables) {
             org.json.JSONArray rows=backup.getJSONArray(table);
             if(rows.length()>100000) throw new org.json.JSONException("Backup too large");
@@ -93,6 +137,10 @@ public final class Store extends SQLiteOpenHelper {
                     if(row.getLong("cents")<0||row.getString("category").isEmpty()) throw new org.json.JSONException("Invalid budget");
                 } else if(table.equals("goals")) {
                     if(row.getLong("target")<=0||row.getLong("saved")<0||row.getString("name").isEmpty()) throw new org.json.JSONException("Invalid goal");
+                } else if(table.equals("recurring")) {
+                    if(row.getLong("cents")<=0||row.getString("category").isEmpty()||!java.util.Arrays.asList("Weekly","Fortnightly","Monthly").contains(row.getString("frequency")))
+                        throw new org.json.JSONException("Invalid recurring transaction");
+                    java.time.LocalDate.parse(row.getString("next_date"));
                 } else {
                     if(row.getLong("cents")<=0||row.getString("name").isEmpty()) throw new org.json.JSONException("Invalid bill");
                     java.time.LocalDate.parse(row.getString("due"));
@@ -129,6 +177,7 @@ public final class Store extends SQLiteOpenHelper {
             case "budgets": return java.util.Arrays.asList("category","cents").contains(col);
             case "goals": return java.util.Arrays.asList("id","name","target","saved").contains(col);
             case "bills": return java.util.Arrays.asList("id","name","cents","due").contains(col);
+            case "recurring": return java.util.Arrays.asList("id","kind","category","note","cents","next_date","frequency").contains(col);
             default: return false;
         }
     }
