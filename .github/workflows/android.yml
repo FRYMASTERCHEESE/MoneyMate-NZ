@@ -27,6 +27,32 @@ jobs:
           gradle-version: '8.13'
       - name: Run tests and build debug APK
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify Android screens and capture screenshots
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          arch: x86_64
+          profile: pixel_2
+          disable-animations: true
+          script: |
+            gradle --no-daemon :app:connectedDebugAndroidTest
+            mkdir -p screenshots
+            adb pull /sdcard/Android/data/nz.moneymate.app/files/screenshots/. screenshots/
+            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > screenshots/apk-certificate.txt
+      - name: Upload Android screenshots and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneymate-visual-verification
+          path: |
+            screenshots/
+            app/build/reports/androidTests/
+            app/build/reports/tests/
       - name: Upload test APK and unsigned release AAB
         uses: actions/upload-artifact@v4
         with:
