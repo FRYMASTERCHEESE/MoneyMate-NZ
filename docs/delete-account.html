@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en-NZ">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; connect-src 'self' https://*.supabase.co; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Delete your account — MoneyMate NZ</title><link rel="stylesheet" href="account.css">
+</head>
+<body><main>
+  <a href="./">← MoneyMate NZ</a><h1>Delete your MoneyMate NZ account</h1>
+  <p>You can delete your account here without reinstalling the app. Deletion permanently removes your Supabase account and its authentication identity. It cannot be undone.</p>
+  <p>MoneyMate NZ does not upload financial records. To remove local records on this device, use <strong>Account → Delete account permanently</strong> in the app. After web deletion, clear MoneyMate NZ’s app storage on each device. Delete exported CSV/JSON files separately. The original local profile is preserved by in-app account deletion.</p>
+  <p>Supabase may retain limited security logs and backup copies under its retention rules. Google advertising data is governed by <a href="https://policies.google.com/privacy">Google’s policy</a>. Read our <a href="privacy.html">privacy policy</a>.</p>
+  <form id="delete-form">
+    <label>Email <input id="email" type="email" autocomplete="username" required maxlength="254"></label>
+    <label>Current password <input id="password" type="password" autocomplete="current-password" required maxlength="128"></label>
+    <label>Type DELETE to confirm <input id="confirmation" autocomplete="off" required pattern="DELETE"></label>
+    <button id="delete" type="submit" disabled>Delete account permanently</button>
+  </form>
+  <p id="status" role="status" aria-live="polite">Checking account service configuration…</p>
+  <details><summary>Forgot your password?</summary><p>Enter your email above, request a reset code, then enter the email code and a new password below. A reset does not delete the account; submit the deletion form afterwards.</p>
+    <button id="send-reset" type="button" disabled>Send password reset code</button>
+    <label>Email code <input id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="10"></label>
+    <label>New password <input id="new-password" type="password" autocomplete="new-password" minlength="12" maxlength="128"></label>
+    <button id="reset" type="button" disabled>Reset password</button>
+  </details>
+</main><script src="account.js"></script></body></html>

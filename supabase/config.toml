@@ -1,0 +1,5 @@
+project_id = "moneymate-nz"
+
+# Validate bearer tokens against Auth inside the handler; accepts current JWT signing keys.
+[functions.delete-account]
+verify_jwt = false

@@ -29,8 +29,12 @@ public final class MainActivity extends Activity {
     private long lastThemeCheck=0L;
     private static final String THEME_URL="https://frymastercheese.github.io/MoneyMate-NZ/app-theme.json";
     private static final String THEME_KEY="remote_theme_v1";
+    private AuthClient auth;
+    private boolean accountBusy=false;
+    private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
+    private String documentOwner;
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); store=new Store(this);
+        super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
             applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
@@ -112,6 +116,7 @@ public final class MainActivity extends Activity {
         l.addView(text(heading,20,true));l.addView(text(detail,14,false));content.addView(l);
     }
     private void show(String page) {
+        if(accountBusy)return;
         currentPage=page;
         LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(canvasColor);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
@@ -124,12 +129,12 @@ public final class MainActivity extends Activity {
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(0);
         final View[] selectedTab=new View[1];
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export"}) {
+        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
             nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
@@ -296,7 +301,7 @@ public final class MainActivity extends Activity {
     }
     private void exports() {
         title("Your data stays on this device");
-        line("Export transactions as CSV to a location you choose. No account or cloud service required.");
+        line("Export or restore records for the current local profile only. Accounts do not sync financial records to the cloud.");
         content.addView(button("Export CSV",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
@@ -323,8 +328,107 @@ public final class MainActivity extends Activity {
         }));
         line("Backups contain sensitive financial information. Store them securely. Restoring replaces current records.");
     }
+    @Override public void startActivityForResult(Intent intent,int requestCode) {
+        if(requestCode>=100&&requestCode<=102)documentOwner=Store.databaseName(auth.userId());
+        super.startActivityForResult(intent,requestCode);
+    }
+    private void switchProfile() {
+        store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
+    }
+    private void account() {
+        title("Your MoneyMate account");
+        line("Financial records stay on this device. Each signed-in account has a separate local profile. Accounts do not provide cloud backup or sync.");
+        content.addView(button("Privacy policy",()->new AlertDialog.Builder(this).setTitle("Privacy and accounts")
+            .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage. Signing out hides your account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
+            .setPositiveButton("Read full policy",(d,w)->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html"))))
+            .setNegativeButton("Close",null).show()));
+        if(auth.userId()==null) {
+            line("Local profile • your existing records are preserved");
+            if(!AuthClient.configured()){line("Accounts are not available in this build yet. Local budgeting and backups still work.");return;}
+            content.addView(button("Sign in",()->credentialsForm(false)));
+            content.addView(button("Create account",()->credentialsForm(true)));
+            content.addView(button("Confirm email",()->emailCodeForm(false)));
+            content.addView(button("Resend confirmation code",()->emailRequest(false)));
+            content.addView(button("Forgot password",()->emailRequest(true)));
+            content.addView(button("Reset password with email code",()->emailCodeForm(true)));
+        } else {
+            line("Signed in as "+auth.email());
+            content.addView(button("Sign out",()->new AlertDialog.Builder(this).setTitle("Sign out?")
+                .setMessage("Your account records remain on this device and are hidden until you sign in again. The separate local profile will open. If offline, this device still signs out; remote sessions may remain active.")
+                .setNegativeButton("Cancel",null).setPositiveButton("Sign out",(d,w)->accountTask(()->auth.signout(),()->{switchProfile();},true)).show()));
+            if(store.isEmpty())content.addView(button("Import existing local records",()->new AlertDialog.Builder(this).setTitle("Copy local records into this account?")
+                .setMessage("This copies all records from the original local profile into this empty account profile. The original local records remain intact. Only import records that belong to you.")
+                .setNegativeButton("Cancel",null).setPositiveButton("Import",(d,w)->{
+                    try(Store original=new Store(this)){if(!store.isEmpty())throw new IllegalStateException("Account profile must be empty");store.restoreJson(original.backupJson());show("Account");}
+                    catch(Exception error){message("Import failed. Your original records are safe.");}
+                }).show()));
+            content.addView(button("Delete account permanently",()->deleteForm()));
+        }
+    }
+    private LinearLayout form(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(dp(24),dp(8),dp(24),dp(8));return layout;}
+    private EditText emailInput(LinearLayout layout){EditText field=input(layout,"Email",false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);return field;}
+    private EditText passwordInput(LinearLayout layout,String hint){EditText field=input(layout,hint,false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return field;}
+    private String emailValue(EditText field){String value=field.getText().toString().trim();if(!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches())throw new IllegalArgumentException("Enter a valid email address");return value;}
+    private void credentialsForm(boolean signup) {
+        LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 12 characters)":"Password");
+        CheckBox consent=new CheckBox(this);consent.setText("I have read the privacy policy and agree to create an account");if(signup)layout.addView(consent);
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle(signup?"Create account":"Sign in").setView(layout).setNegativeButton("Cancel",null).setPositiveButton(signup?"Create account":"Sign in",null).create();
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            try {
+                String address=emailValue(email),secret=password.getText().toString();
+                if(signup){if(!consent.isChecked())throw new IllegalArgumentException("Please read and accept the privacy policy");AuthClient.checkPassword(secret);}
+                password.setText("");dialog.dismiss();
+                accountTask(()->{if(signup)auth.signup(address,secret);else auth.signin(address,secret);},()->{
+                    if(signup)message("If registration is available, an email code will arrive. Use Confirm email, then sign in.");else switchProfile();
+                },false);
+            }catch(Exception error){email.setError(error.getMessage());}
+        }));dialog.show();
+    }
+    private void emailRequest(boolean recovery) {
+        LinearLayout layout=form();EditText email=emailInput(layout);
+        new AlertDialog.Builder(this).setTitle(recovery?"Request password reset":"Resend confirmation").setView(layout).setNegativeButton("Cancel",null)
+            .setPositiveButton("Send code",(d,w)->{try{String address=emailValue(email);accountTask(()->{if(recovery)auth.recover(address);else auth.resend(address);},()->message("If eligible, a code will arrive by email. Check your inbox and spam folder."),false);}catch(Exception error){message(error.getMessage());}}).show();
+    }
+    private void emailCodeForm(boolean recovery) {
+        LinearLayout layout=form();EditText email=emailInput(layout),code=input(layout,"Email code",false);code.setInputType(InputType.TYPE_CLASS_NUMBER);
+        EditText password=recovery?passwordInput(layout,"New password (at least 12 characters)"):null;
+        new AlertDialog.Builder(this).setTitle(recovery?"Reset password":"Confirm email").setView(layout).setNegativeButton("Cancel",null)
+            .setPositiveButton(recovery?"Reset password":"Confirm",(d,w)->{try{
+                String address=emailValue(email),token=code.getText().toString().trim(),secret=recovery?password.getText().toString():"";
+                if(recovery){AuthClient.checkPassword(secret);password.setText("");}
+                accountTask(()->{if(recovery)auth.reset(address,token,secret);else auth.confirm(address,token);},()->message(recovery?"Password reset. Sign in with your new password.":"Email confirmed. You can now sign in."),false);
+            }catch(Exception error){message(error.getMessage());}}).show();
+    }
+    private void deleteForm() {
+        LinearLayout layout=form();layout.addView(text("Permanently deletes your Supabase account and this account's local records on this device. Other devices and exported files must be cleared separately. Your original local profile is preserved. This cannot be undone.",14,false));
+        EditText password=passwordInput(layout,"Current password"),confirm=input(layout,"Type DELETE",false);
+        new AlertDialog.Builder(this).setTitle("Delete account permanently").setView(layout).setNegativeButton("Cancel",null).setPositiveButton("Delete account",(d,w)->{
+            if(!"DELETE".equals(confirm.getText().toString())){message("Type DELETE to confirm");return;}
+            String secret=password.getText().toString(),database=Store.databaseName(auth.userId());password.setText("");
+            accountTask(()->auth.deleteAccount(secret),()->{
+                store.close();auth.clear();deleteDatabase(database);store=new Store(this);show("Account");message("Account deleted. Exported files and records on other devices must be removed separately.");
+            },false);
+        }).show();
+    }
+    private interface AccountWork {void run() throws Exception;}
+    private void accountTask(AccountWork work,Runnable success,boolean localSignout) {
+        if(accountBusy)return;accountBusy=true;
+        int priorOrientation=getRequestedOrientation();setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
+        AlertDialog progress=new AlertDialog.Builder(this).setMessage("Contacting account service…").setCancelable(false).create();progress.show();
+        accountWorker.execute(()->{
+            String failure=null;try{work.run();}catch(Exception error){failure=error instanceof IllegalArgumentException?error.getMessage():"Could not complete the account request. Check your connection and details, or request a fresh code.";}
+            final String problem=failure;
+            runOnUiThread(()->{
+                accountBusy=false;if(isFinishing()||isDestroyed())return;progress.dismiss();
+                if(problem==null)success.run();else if(localSignout){switchProfile();message("Signed out on this device. Remote session revocation could not be confirmed.");}else message(problem);
+                setRequestedOrientation(priorOrientation);
+            });
+        });
+    }
+    private void message(String value){new AlertDialog.Builder(this).setMessage(value).setPositiveButton("OK",null).show();}
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
+        if(code>=100&&code<=102&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
         if(result==RESULT_OK&&data!=null&&data.getData()!=null&&code==100){
             try(OutputStream out=getContentResolver().openOutputStream(data.getData())) {
                 out.write(String.join("\r\n",store.csvRows()).getBytes(StandardCharsets.UTF_8));
@@ -368,5 +472,5 @@ public final class MainActivity extends Activity {
         ad.loadAd(new AdRequest.Builder().build());
         if(root!=null)root.addView(ad);
     }
-    @Override protected void onDestroy(){if(ad!=null)ad.destroy();store.close();super.onDestroy();}
+    @Override protected void onDestroy(){if(ad!=null)ad.destroy();accountWorker.shutdown();store.close();super.onDestroy();}
 }

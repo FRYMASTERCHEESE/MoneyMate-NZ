@@ -9,7 +9,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class Store extends SQLiteOpenHelper {
-    public Store(Context c) { super(c, "moneymate.db", null, 2); }
+    public Store(Context c) { this(c, null); }
+    public Store(Context c, String userId) { super(c, databaseName(userId), null, 2); }
+    static String databaseName(String userId) {
+        return userId == null ? "moneymate.db" : "account-" + java.util.UUID.fromString(userId).toString() + ".db";
+    }
+    public boolean isEmpty() {
+        for(String table:new String[]{"transactions","budgets","goals","bills","recurring"})
+            try(Cursor c=query("SELECT COUNT(*) FROM "+table)) {c.moveToFirst();if(c.getLong(0)>0)return false;}
+        return true;
+    }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK(kind IN ('Income','Expense')), category TEXT NOT NULL, note TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), date TEXT NOT NULL)");
         db.execSQL("CREATE TABLE budgets (category TEXT PRIMARY KEY, cents INTEGER NOT NULL CHECK(cents >= 0))");

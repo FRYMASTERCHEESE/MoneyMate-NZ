@@ -9,6 +9,9 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
+      MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
     timeout-minutes: 20
     permissions:
       contents: read
@@ -42,7 +45,15 @@ jobs:
             echo 'Signing secret unavailable: this run uses an ephemeral debug key.'
           fi
       - name: Run tests and build debug APK
+        env:
+          MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
+          MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
         run: gradle --no-daemon :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test account deletion authorization
+        run: node --test supabase/functions/delete-account/handler.test.mjs
       - name: Enable emulator acceleration
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules

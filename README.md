@@ -41,3 +41,7 @@ This is an **MVP**, not a finished Play Store submission. Push notifications and
 ## Application ID
 
 `nz.moneymate.app`
+# Accounts (0.3.0)
+
+Optional Supabase email/password accounts with email-code confirmation, reset, sign-out, encrypted session storage, separate offline local profiles and account deletion. Existing local records are preserved. Accounts do not sync financial records. See [account setup](docs/ACCOUNTS_SETUP.md) for exact project, SMTP, public build configuration, deletion deployment and Play publication requirements. Blank configuration keeps local budgeting available.
+

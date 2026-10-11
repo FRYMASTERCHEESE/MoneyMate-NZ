@@ -13,4 +13,6 @@
 
 New apps submitted after 31 August 2026 must target API 36 or higher. This code targets 36.
 
-**Current limitations:** This early functional build has manual income/expense transactions, monthly category budgets, goals, dated bills and CSV transaction export. Automated recurring transactions, notifications, full backup/restore, import, polished graphical charts, settings and published privacy policy are **not implemented yet**. The CI-generated release AAB is unsigned and not immediately uploadable.
+**Account release gate:** Complete `ACCOUNTS_SETUP.md`, including dedicated project, custom SMTP, public client configuration, deployed deletion function, live email/deletion tests, private support email and final privacy retention details. Publish and test both the in-app deletion flow and `delete-account.html`, then provide the web deletion URL in Play Console. Financial records remain local, separated by account; no financial cloud sync is provided.
+
+**Current limitations:** Notifications are not implemented. The release AAB is unsigned and not immediately uploadable; production ads and final policy details still need configuration. Store captures from 0.2.x predate the Account tab; recapture before publication.
