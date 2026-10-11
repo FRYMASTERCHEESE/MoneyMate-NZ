@@ -36,6 +36,8 @@ public class VisualTest {
         activity=inst.startActivitySync(launch);inst.waitForIdleSync();
         assertTrue(device.wait(Until.hasObject(By.text("AVAILABLE THIS MONTH · NZD")),10000));
         assertTrue(device.takeScreenshot(new File(dir,"02-home.png")));
+        new UiScrollable(new UiSelector().className("android.widget.ScrollView")).scrollIntoView(new UiSelector().textContains("Rent   "));
+        assertTrue(device.takeScreenshot(new File(dir,"03-spending.png")));
         for(String page:new String[]{"Transactions","Budgets","Goals","Bills","Export"}) {
             UiObject tab=device.findObject(new UiSelector().className("android.widget.Button").text(page));
             if(!tab.exists()) {

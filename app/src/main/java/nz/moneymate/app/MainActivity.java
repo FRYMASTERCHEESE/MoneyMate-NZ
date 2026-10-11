@@ -22,7 +22,6 @@ import com.google.android.ump.*;
 
 public final class MainActivity extends Activity {
     private Store store; private LinearLayout root, content; private AdView ad;
-    private String activePage="Home";
     private final int ink=Color.rgb(20,41,40), green=Color.rgb(6,120,91);
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); store=new Store(this); store.postDueRecurring(); show("Home"); initAds();
@@ -43,6 +42,10 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(4),dp(5),dp(4),dp(5));b.setLayoutParams(lp);
         b.setOnClickListener(v->act.run());return b;
     }
+    private Button record(String label,Runnable action) {
+        Button b=button(label,action);b.setBackground(new android.graphics.drawable.RippleDrawable(android.content.res.ColorStateList.valueOf(0x2208785b),surface(Color.WHITE,18),null));
+        b.setTextColor(ink);b.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);b.setElevation(dp(1));return b;
+    }
     private LinearLayout card() {
         LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(8),dp(8),dp(8),dp(8));
         l.setBackground(surface(Color.WHITE,24));l.setElevation(dp(2));
@@ -53,7 +56,6 @@ public final class MainActivity extends Activity {
         l.addView(text(heading,20,true));l.addView(text(detail,14,false));content.addView(l);
     }
     private void show(String page) {
-        activePage=page;
         LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(0xfff5f6ef);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         setContentView(frame);
@@ -80,7 +82,7 @@ public final class MainActivity extends Activity {
     private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
     private String month() {return YearMonth.now().toString();}
     private void home() {
-        title("This month · "+month());
+        title(YearMonth.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy",java.util.Locale.forLanguageTag("en-NZ"))));
         long in=store.sum("Income",month()),out=store.sum("Expense",month());
         LinearLayout balance=card();balance.setBackground(surface(0xff123f35,24));
         TextView label=text("AVAILABLE THIS MONTH · NZD",12,true);label.setTextColor(0xffbce7d6);balance.addView(label);
@@ -113,10 +115,11 @@ public final class MainActivity extends Activity {
     private EditText input(LinearLayout layout,String hint,boolean amount) {
         EditText e=new EditText(this);e.setHint(hint);
         if(amount)e.setInputType(InputType.TYPE_CLASS_NUMBER|InputType.TYPE_NUMBER_FLAG_DECIMAL);
+        e.setPadding(dp(12),dp(12),dp(12),dp(12));e.setMinHeight(dp(52));e.setTextColor(ink);
         layout.addView(e);return e;
     }
     private void dialog(String label,String[] hints,boolean[] numbers,java.util.function.Consumer<String[]> save) {
-        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(24,8,24,8);
+        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(24),dp(8),dp(24),dp(8));
         EditText[] es=new EditText[hints.length];
         for(int i=0;i<hints.length;i++)es[i]=input(l,hints[i],numbers[i]);
         new AlertDialog.Builder(this).setTitle(label).setView(l).setNegativeButton("Cancel",null)
@@ -144,7 +147,7 @@ public final class MainActivity extends Activity {
             while(schedule.moveToNext()) {
                 long id=schedule.getLong(0);
                 String name=schedule.getString(1)+" · "+schedule.getString(2)+" · "+MoneyMath.format(schedule.getLong(3))+" · "+schedule.getString(5)+" · next "+schedule.getString(4);
-                content.addView(button(name+"  (tap to stop)",()->new AlertDialog.Builder(this)
+                content.addView(record(name+"  (tap to stop)",()->new AlertDialog.Builder(this)
                     .setTitle("Stop this recurring transaction?").setMessage(name)
                     .setNegativeButton("Cancel",null).setPositiveButton("Stop",(d,w)->{store.deleteRecurring(id);show("Transactions");}).show()));
             }
@@ -155,7 +158,7 @@ public final class MainActivity extends Activity {
             while(c.moveToNext()){
                 long id=c.getLong(0);
                 String s=c.getString(1)+"  "+c.getString(2)+" · "+c.getString(3)+"\n"+c.getString(4)+"   "+MoneyMath.format(c.getLong(5));
-                content.addView(button(s,()->new AlertDialog.Builder(this).setTitle("Delete transaction?")
+                content.addView(record(s,()->new AlertDialog.Builder(this).setTitle("Delete transaction?")
                   .setMessage(s).setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{store.deleteTransaction(id);show("Transactions");}).show()));
             }
         }
@@ -163,7 +166,7 @@ public final class MainActivity extends Activity {
     private void recurringForm() {
         final String[] kinds={"Expense","Income"};
         final String[] frequencies={"Weekly","Fortnightly","Monthly"};
-        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(24,8,24,8);
+        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(24),dp(8),dp(24),dp(8));
         Spinner kind=new Spinner(this);kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,kinds));l.addView(kind);
         EditText category=input(l,"Category",false);
         EditText note=input(l,"Note (optional)",false);
@@ -193,8 +196,10 @@ public final class MainActivity extends Activity {
             if(c.getCount()==0)empty("Give every category a plan","Set a monthly limit and follow your progress.");
             while(c.moveToNext()) {
                 long used=c.getLong(2),limit=c.getLong(1);
-                line(c.getString(0)+": "+MoneyMath.format(used)+" / "+MoneyMath.format(limit));
-                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);p.setProgressTintList(android.content.res.ColorStateList.valueOf(used>limit?0xffb84f38:green));p.setMax(100);p.setProgress(limit==0?100:(int)Math.min(100,(used*100.0/limit)));content.addView(p);
+                LinearLayout budget=card();budget.addView(text(c.getString(0),20,true));
+                budget.addView(text(MoneyMath.format(used)+" spent of "+MoneyMath.format(limit),15,false));
+                budget.addView(text(used>limit?MoneyMath.format(used-limit)+" over budget":MoneyMath.format(limit-used)+" left",14,true));
+                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);p.setProgressTintList(android.content.res.ColorStateList.valueOf(used>limit?0xffb84f38:green));p.setMax(100);p.setProgress(limit==0?(used>0?100:0):(int)Math.min(100,(used*100.0/limit)));budget.addView(p);content.addView(budget);
             }
         }
     }
@@ -208,10 +213,10 @@ public final class MainActivity extends Activity {
             if(c.getCount()==0)empty("Make room for something good","Name a goal and start saving towards it.");
             while(c.moveToNext()) {
                 long id=c.getLong(0);String name=c.getString(1);
-                line(name+"  "+MoneyMath.format(c.getLong(3))+" / "+MoneyMath.format(c.getLong(2)));
+                LinearLayout goal=card();goal.addView(text(name,20,true));goal.addView(text(MoneyMath.format(c.getLong(3))+" saved of "+MoneyMath.format(c.getLong(2)),15,false));
                 ProgressBar progress=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
                 progress.setProgressTintList(android.content.res.ColorStateList.valueOf(green));progress.setMax(100);
-                progress.setProgress((int)Math.min(100,c.getLong(3)*100.0/c.getLong(2)));content.addView(progress);
+                progress.setProgress((int)Math.min(100,c.getLong(3)*100.0/c.getLong(2)));goal.addView(progress);content.addView(goal);
                 content.addView(button("+ Add savings to "+name,()->dialog("Add savings",new String[]{"Amount NZD"},new boolean[]{true},v->{
                     long amount=MoneyMath.toCents(v[0]);if(amount<=0)throw new IllegalArgumentException("Positive amount required");
                     store.contribute(id,amount);show("Goals");
