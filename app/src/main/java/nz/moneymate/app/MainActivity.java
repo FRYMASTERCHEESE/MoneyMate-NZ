@@ -67,7 +67,16 @@ public final class MainActivity extends Activity {
         title("Spending categories");
         try(Cursor c=store.query("SELECT category,SUM(cents) FROM transactions WHERE kind='Expense' AND substr(date,1,7)=? GROUP BY category ORDER BY SUM(cents) DESC",month())) {
             if(c.getCount()==0)line("No expenses recorded yet.");
-            while(c.moveToNext())line(c.getString(0)+"  ·  "+MoneyMath.format(c.getLong(1)));
+            long largest=0;
+            while(c.moveToNext())largest=Math.max(largest,c.getLong(1));
+            c.moveToPosition(-1);
+            while(c.moveToNext()){
+                line(c.getString(0)+"  ·  "+MoneyMath.format(c.getLong(1)));
+                ProgressBar p=new ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal);
+                p.setMax(100);
+                p.setProgress(largest==0?0:(int)Math.round(c.getLong(1)*100.0/largest));
+                content.addView(p);
+            }
         }
         title("Upcoming bills");
         try(Cursor c=store.query("SELECT name,cents,due FROM bills WHERE due>=? ORDER BY due LIMIT 5",LocalDate.now().toString())) {
