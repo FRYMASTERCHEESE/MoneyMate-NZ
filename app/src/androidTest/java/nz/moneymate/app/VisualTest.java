@@ -36,9 +36,10 @@ public class VisualTest {
             data.addBudget("Groceries",80000);data.addBudget("Transport",25000);
             data.addGoal("Summer getaway",200000);data.contribute(1,75000);
             data.addBill("Power",14500,LocalDate.now().plusDays(5).toString());
+            data.addRecurring("Expense","Internet","Example data",8500,LocalDate.now().plusDays(10).toString(),"Monthly");
         }
         activity=inst.startActivitySync(launch);inst.waitForIdleSync();
-        assertTrue(device.wait(Until.hasObject(By.text("AVAILABLE THIS MONTH Â· NZD")),10000));
+        assertTrue(device.wait(Until.hasObject(By.text("AVAILABLE THIS MONTH Ã‚Â· NZD")),10000));
         capture(device,dir,"02-home.png");
         new UiScrollable(new UiSelector().className("android.widget.ScrollView")).scrollIntoView(new UiSelector().textContains("Rent   "));
         capture(device,dir,"03-spending.png");
@@ -50,7 +51,11 @@ public class VisualTest {
             tab.click();inst.waitForIdleSync();
             capture(device,dir,page.toLowerCase()+".png");
         }
-        try(Store data=new Store(ctx)){assertEquals(480000,data.sum("Income",today.substring(0,7)));assertEquals(260500,data.sum("Expense",today.substring(0,7)));}
+        try(Store data=new Store(ctx)) {
+            String backup=data.backupJson();data.restoreJson(backup);
+            assertEquals(480000,data.sum("Income",today.substring(0,7)));assertEquals(260500,data.sum("Expense",today.substring(0,7)));
+            for(String table:new String[]{"budgets","goals","bills","recurring"})try(android.database.Cursor c=data.query("SELECT COUNT(*) FROM "+table)){assertTrue(c.moveToFirst());assertTrue(c.getLong(0)>0);}
+        }
         final android.app.Activity last=activity;inst.runOnMainSync(()->last.finish());
     }
 }
