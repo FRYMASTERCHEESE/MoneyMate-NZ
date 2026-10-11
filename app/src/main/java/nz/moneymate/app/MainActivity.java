@@ -164,15 +164,55 @@ public final class MainActivity extends Activity {
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
         }));
-        line("Keep your export somewhere safe. Clearing app data or uninstalling removes local records.");
+        content.addView(button("Backup all data (JSON)",()->{
+            Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("application/json");
+            i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-backup-"+LocalDate.now()+".json");
+            startActivityForResult(i,101);
+        }));
+        content.addView(button("Restore full backup (replaces existing data)",()->{
+            Intent i=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+            i.addCategory(Intent.CATEGORY_OPENABLE);
+            i.setType("application/json");
+            startActivityForResult(i,102);
+        }));
+        content.addView(button("Advertising privacy choices",()->{
+            UserMessagingPlatform.showPrivacyOptionsForm(this,error->{
+                if(error!=null)Toast.makeText(this,"Choices unavailable: "+error.getMessage(),Toast.LENGTH_LONG).show();
+            });
+        }));
+        line("Backups contain sensitive financial information. Store them securely. Restoring replaces current records.");
     }
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
-        if(code==100&&result==RESULT_OK&&data!=null&&data.getData()!=null){
+        if(result==RESULT_OK&&data!=null&&data.getData()!=null&&code==100){
             try(OutputStream out=getContentResolver().openOutputStream(data.getData())) {
                 out.write(String.join("\r\n",store.csvRows()).getBytes(StandardCharsets.UTF_8));
                 Toast.makeText(this,"Export saved",Toast.LENGTH_LONG).show();
             }catch(Exception ex){Toast.makeText(this,"Export failed: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
+        } else if(code==101&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
+            try(OutputStream out=getContentResolver().openOutputStream(data.getData())) {
+                out.write(store.backupJson().getBytes(StandardCharsets.UTF_8));
+                Toast.makeText(this,"Complete backup saved",Toast.LENGTH_LONG).show();
+            }catch(Exception ex){Toast.makeText(this,"Backup failed: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
+        } else if(code==102&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
+            try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())) {
+                java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
+                byte[] block=new byte[8192];int n;
+                while((n=in.read(block))!=-1) {
+                    if(buf.size()+n>20_000_000)throw new IllegalArgumentException("Backup exceeds 20 MB");
+                    buf.write(block,0,n);
+                }
+                String backup=new String(buf.toByteArray(),StandardCharsets.UTF_8);
+                new AlertDialog.Builder(this).setTitle("Replace all local data?")
+                    .setMessage("Your existing transactions, budgets, goals and bills will be replaced. Continue?")
+                    .setNegativeButton("Cancel",null)
+                    .setPositiveButton("Restore",(dialog,which)->{
+                        try{store.restoreJson(backup);show("Home");Toast.makeText(this,"Restore completed",Toast.LENGTH_LONG).show();}
+                        catch(Exception ex){new AlertDialog.Builder(this).setTitle("Restore failed").setMessage(ex.getMessage()).setPositiveButton("OK",null).show();}
+                    }).show();
+            }catch(Exception ex){Toast.makeText(this,"Could not read backup: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
         }
     }
     private void initAds() {
