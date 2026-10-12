@@ -27,3 +27,46 @@ test("definitive auth failure is different from offline/network failures",()=>{
  for(const code of [400,401,403])assert.equal(sessionInvalidated(code),true);
  for(const code of [429,0,408,500,503,undefined])assert.equal(sessionInvalidated(code),false);
 });
+
+test("browser vault survives reload, refresh-token rotation and sign-out",async()=>{
+ const previous=globalThis.indexedDB;
+ const records=new Map();let created=false;
+ const db={
+  objectStoreNames:{contains:()=>created},
+  createObjectStore:()=>{created=true;},
+  close(){},
+  transaction(){
+   const tx={
+    objectStore:()=>({
+     get:key=>request(()=>records.get(key)),
+     put:(value,key)=>request(()=>records.set(key,structuredClone(value))),
+     delete:key=>request(()=>records.delete(key))
+    })
+   };
+   function request(run){
+    const r={};
+    queueMicrotask(()=>{
+     try{r.result=run();r.onsuccess?.();tx.oncomplete?.();}
+     catch(error){r.error=error;r.onerror?.();tx.onerror?.();}
+    });
+    return r;
+   }
+   return tx;
+  }
+ };
+ globalThis.indexedDB={open:()=>{
+  const r={};
+  queueMicrotask(()=>{r.result=db;if(!created)r.onupgradeneeded?.();r.onsuccess?.();});
+  return r;
+ }};
+ try{
+  const {saveLoginSession,loadLoginSession,clearLoginSession}=await import("../docs/auth-session.mjs");
+  assert.equal(await loadLoginSession(),null);
+  await saveLoginSession(session());
+  assert.equal((await loadLoginSession()).refresh_token,"refresh-test");
+  await saveLoginSession({...session(),refresh_token:"new-rotated-refresh-token"});
+  assert.equal((await loadLoginSession()).refresh_token,"new-rotated-refresh-token");
+  await clearLoginSession();
+  assert.equal(await loadLoginSession(),null);
+ }finally{globalThis.indexedDB=previous;}
+});
