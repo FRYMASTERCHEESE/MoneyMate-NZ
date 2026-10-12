@@ -226,6 +226,7 @@ function showModal(kind,id=0){
     +field("date","Due date","date",today());
  }
  $("#editor-title").textContent=title;
+ $("#submit-modal").textContent="Save";
  $("#editor-fields").innerHTML=inner;
  $("#editor-hint").textContent=hint;
  editor.showModal();
