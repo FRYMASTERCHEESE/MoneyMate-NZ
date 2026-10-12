@@ -100,4 +100,12 @@ public class AccountTest {
             }
         } finally {c.deleteDatabase(file);}
     }
+
+    @Test public void cloudDigestDetectsLocalChanges() throws Exception {
+        String before="local records",after="new local records";
+        assertEquals(CloudSync.digest(before),CloudSync.digest(before));
+        assertNotEquals(CloudSync.digest(before),CloudSync.digest(after));
+        CloudSync.Metadata state=new CloudSync.Metadata(false,0,"");
+        assertFalse(state.enabled);
+    }
 }
