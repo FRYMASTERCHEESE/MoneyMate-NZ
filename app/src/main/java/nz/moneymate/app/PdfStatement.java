@@ -26,6 +26,7 @@ public final class PdfStatement {
     public static String toCsv(List<String> lines) {
         if(lines==null||lines.isEmpty()||lines.size()>6000)
             throw new IllegalArgumentException("PDF has no readable statement rows or is too long");
+        if(AnzStatement.matches(lines))return AnzStatement.toCsv(lines);
         List<String> cleaned=new ArrayList<>();
         for(String line:lines){
             String s=line==null?"":line.trim().replaceAll("\\s+"," ");
