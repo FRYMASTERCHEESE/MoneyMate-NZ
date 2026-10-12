@@ -33,6 +33,50 @@ public final class Store extends SQLiteOpenHelper {
         ContentValues v = new ContentValues(); v.put("kind", kind); v.put("category",category); v.put("note",note); v.put("cents",cents); v.put("date",date);
         getWritableDatabase().insertOrThrow("transactions",null,v);
     }
+    public static final class BankImportResult {
+        public final int inserted,skipped;
+        BankImportResult(int inserted,int skipped){this.inserted=inserted;this.skipped=skipped;}
+    }
+    /** Import only after explicit preview/confirmation. Uses a single SQLite transaction.
+     * Exact bank-imported rows are counted as a MULTISET, so distinct identical entries
+     * can be kept without importing the same statement twice. No existing rows are replaced.
+     * Account nicknames must stay consistent across file imports.
+     */
+    public BankImportResult importBankCsv(List<BankCsv.Entry> incoming,boolean preview) {
+        if(incoming==null||incoming.size()>5000)throw new IllegalArgumentException("Invalid bank import");
+        SQLiteDatabase db=preview?getReadableDatabase():getWritableDatabase();
+        if(!preview)db.beginTransaction();
+        try {
+            java.util.Map<String,Integer> existing=new java.util.HashMap<>();
+            try(Cursor cursor=db.rawQuery(
+                "SELECT date,kind,category,note,cents FROM transactions WHERE note LIKE 'Bank CSV (%'",null)) {
+                while(cursor.moveToNext()){
+                    BankCsv.Entry entry=new BankCsv.Entry(cursor.getString(0),cursor.getString(1),
+                        cursor.getString(2),cursor.getString(3),cursor.getLong(4));
+                    String key=entry.key();existing.put(key,existing.getOrDefault(key,0)+1);
+                }
+            }
+            java.util.Map<String,Integer> seen=new java.util.HashMap<>();
+            int inserted=0,skipped=0;
+            for(BankCsv.Entry row:incoming) {
+                if(row==null||row.cents<1||row.cents>9_007_199_254_740_991L)
+                    throw new IllegalArgumentException("Invalid bank amount");
+                String key=row.key(),counted=key;
+                int ordinal=seen.getOrDefault(counted,0)+1;
+                seen.put(counted,ordinal);
+                if(ordinal<=existing.getOrDefault(key,0)){skipped++;continue;}
+                if(!preview){
+                    ContentValues v=new ContentValues();
+                    v.put("date",row.date);v.put("kind",row.kind);v.put("category",row.category);
+                    v.put("note",row.note);v.put("cents",row.cents);
+                    db.insertOrThrow("transactions",null,v);
+                }
+                inserted++;
+            }
+            if(!preview)db.setTransactionSuccessful();
+            return new BankImportResult(inserted,skipped);
+        } finally {if(!preview)db.endTransaction();}
+    }
     public void addBudget(String category, long cents) {
         ContentValues v=new ContentValues(); v.put("category",category);v.put("cents",cents);
         getWritableDatabase().insertWithOnConflict("budgets",null,v,SQLiteDatabase.CONFLICT_REPLACE);
