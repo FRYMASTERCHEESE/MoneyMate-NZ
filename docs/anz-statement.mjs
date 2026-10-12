@@ -12,7 +12,7 @@ const MONTHS=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov",
 const MONEY=/[-+]?(?:NZD\s*|\$)?(?:0|[1-9][0-9,]*)(?:\.[0-9]{2})/i;
 const PAIR=new RegExp("\\s("+MONEY.source+")\\s+("+MONEY.source+")\\s*$","i");
 const DATE_RE=/^(\d{1,2})\s+([A-Za-z]{3})\s+(?:(\d{4})\s+)?/;
-const ANZ_HEADER=/\bdate\b.*\b(transaction|details)\b.*\bwithdrawals?\b.*\bdeposits?\b.*\bbalance\b/i;
+const ANZ_HEADER=/\bdate\b.*\b(transaction|details)\b(?=.*\bwithdrawals?\b)(?=.*\bdeposits?\b).*\bbalance\b/i;
 const PERIOD=/(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})\s*(?:-|–|—|to)\s*(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})/i;
 const sanitize=s=>String(s).trim().replace(/\s+/g," ");
 const quote=s=>'"'+String(s).replace(/"/g,'""')+'"';
@@ -60,7 +60,7 @@ export function anzNzdStatementToCsv(lines){
    const m=new RegExp("("+MONEY.source+")\\s*$","i").exec(raw);
    if(!m)throw Error("Opening or carried balance could not be read.");
    const value=amountToCents(m[1]);
-   if(opened&&!/brought forward/i.test(raw))throw Error("This PDF may contain multiple accounts. Import each separately.");
+   if(opened&&!/brought forward|carried forward/i.test(raw))throw Error("This PDF may contain multiple accounts. Import each separately.");
    if(prev!==null&&prev!==value)throw Error("Opening or carried balance disagrees with previous transactions.");
    prev=value;opened=true;
    continue;
