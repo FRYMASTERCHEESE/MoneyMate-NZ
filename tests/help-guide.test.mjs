@@ -27,7 +27,7 @@ test("Android help tab exists and warns before backup restore",()=>{
 test("both website and Android correctly distinguish imported statements from live bank linking",()=>{
   const help=source("docs/help.html");
   const android=source("app/src/main/java/nz/moneymate/app/MainActivity.java");
-  assert.match(help,/Import your NZD bank statement for free/);
+  assert.match(help,/Import your NZD bank CSV or PDF statement for free/);
   assert.match(help,/does <em>not<\/em> automatically download/);
   assert.match(android,/Automatic live bank connections are not yet available/);
 });

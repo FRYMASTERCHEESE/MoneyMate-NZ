@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 7
-        versionName '0.3.3'
+        versionCode 8
+        versionName '0.3.4'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -75,6 +75,7 @@ android {
     buildFeatures { buildConfig true }
 }
 dependencies {
+    implementation 'com.google.mlkit:text-recognition:16.0.1' // bundled, on-device Latin OCR; no per-bank fees
     implementation 'com.google.android.gms:play-services-ads:24.5.0'
     implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
     testImplementation 'junit:junit:4.13.2'

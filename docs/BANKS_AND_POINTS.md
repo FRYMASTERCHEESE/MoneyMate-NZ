@@ -6,6 +6,18 @@
 - The same account ID yields the same points balance on Android and web. Anonymous users cannot call the rewards RPC. Clients cannot insert or edit balances directly.
 - Points are free participation markers. They are not cash, gambling, gift cards, transferable credit or redeemable rewards. There is no money reward or future cash promise. No bank account connection, payment, transaction spending, account balance, or income level is required to claim.
 
+## PDF bank statements (new, reviewed feature candidate)
+
+**ANZ NZ template candidate:** For ANZ 'Statement of Accounts' PDFs with Date / Transaction type and details / Withdrawals / Deposits / Balance, we now calculate the direction from the change between verified consecutive running balances; '10 Sep' dates are resolved using the explicit statement period. If the balance is missing, the PDF spans multiple accounts, the statement period cannot be validated, or a single amount fails to reconcile exactly, the entire import is refused. Synthetic fixtures for ANZ and other generic signed/debit/credit layouts are unit-tested. **This is NOT verification of any customer's real ANZ PDF or every NZ bank layout**. Other banks may work with compatible, unambiguous formats; the RBNZ registry lists banks, not guaranteed PDF compatibility.
+
+- People can download a **NZD PDF statement** from their own bank and select it under **Bank connections**, **Transactions** or **Export** (Android) without paid bank APIs. This is MANUAL import, not automatic bank linking.
+- The website fetches the pinned PDF.js browser reader code from cdnjs only when requested and processes the PDF bytes in the user's browser. It does not upload the statement document to a PDF service. Text-based PDFs only on the website; image-only scanned PDFs are not supported there yet.
+- Android uses Android PdfRenderer and bundled ML Kit Latin text recognition on-device for text or scanned PDF pages. No off-device OCR service or bank credentials. On-device OCR can misread numbers.
+- The fail-closed parser accepts only a limited set of clearly headed NZD statement tables, with signed (+/-) amounts or explicit DR/CR entries; it rejects unclear debit/credit/balance columns instead of guessing. Confirm the original PDF is NZD, not AUD.
+- Users must review **every** newly recognised PDF transaction and explicitly confirm before the existing append-only, duplicate-aware import commits. Save a full JSON backup first. Complex PDFs, unreadable pages and unsupported date/amount layouts may be rejected without importing anything.
+- Website limits PDFs to 4 MB / 12 pages / 200 new rows; Android limits to 4 MB / 8 pages / 200 parsed rows. These are intentionally conservative. The PDF library requires internet to download on first use on the website. No per-bank provider subscriptions apply.
+- This candidate cannot be considered validated for a specific bank until a real **redacted** representative PDF has passed a manual comparison with the full preview and test-device runs; do not request users to upload their unredacted bank records to GitHub.
+
 ## Fee-free bank statement CSV import (new, review branch)
 - On the website, go to **Bank connections → Choose bank CSV file**; on Android choose **Banking → Import NZD bank statement CSV** or **Export → Import bank CSV**.
 - Supports common CSV forms with Date, Amount and Description or Date, Debit, Credit and Details, plus MoneyMate NZ's own exported CSV. Text can include commas in quotes. Date format YYYY-MM-DD or DD/MM/YYYY; choose a short consistent account nickname that contains no bank account number.
