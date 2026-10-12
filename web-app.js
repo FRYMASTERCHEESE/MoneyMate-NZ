@@ -1,4 +1,5 @@
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
+import {decideSync} from "./sync-policy.mjs";
 
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -10,13 +11,17 @@ const pages=["home","transactions","budgets","goals","bills","export","account"]
 const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals:"Savings goals",bills:"Bills",export:"Export & backup",account:"Account"}[p]||"Home");
 let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth=null,config=null,busy=false,searchTerm="";
 let toastTimer,modalKind="",modalTarget=0;
+let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
 function dbOpen(){
  return new Promise((resolve,reject)=>{
-  const req=indexedDB.open("MoneyMateNZWeb",1);
-  req.onupgradeneeded=()=>req.result.createObjectStore("profiles");
+  const req=indexedDB.open("MoneyMateNZWeb",2);
+  req.onupgradeneeded=()=>{
+   if(!req.result.objectStoreNames.contains("profiles"))req.result.createObjectStore("profiles");
+   if(!req.result.objectStoreNames.contains("sync"))req.result.createObjectStore("sync");
+  };
   req.onerror=()=>reject(req.error);
   req.onsuccess=()=>resolve(req.result);
  });
@@ -35,10 +40,15 @@ async function dbErase(id){
  const db=await dbOpen();try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
 async function save(next){
- data=strictData(next);await dbWrite(profile,data);render();
+ const owner=profile;
+ data=strictData(next);await dbWrite(owner,data);render();
+ if(cloudMeta?.enabled && auth?.user?.id===owner){
+  cloudStatus="Saved locally · cloud check pending";
+  void syncCloud(false);
+ }
 }
 async function switchOwner(id){
- profile=id||"guest";
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";
  data=await dbRead(profile);
  const result=recordDue(data,today());
  if(result.created)await dbWrite(profile,result.data);
@@ -128,7 +138,7 @@ function bills(){
 }
 function exportPage(){
  return heading("Export & backup","Take control of your records and move them between your devices.")
- +'<div class="notice warning"><strong>Important:</strong> Your Android app and this laptop store financial data separately. Signing into the same account does not automatically sync transactions. Use a JSON backup to move records between devices. Store backups securely.</div>'
+ +'<div class="notice warning"><strong>Important:</strong> Existing records are stored locally. Signed-in users can opt into secure cloud sync from Account; no local data is overwritten without a backup and explicit choice. Keep your own JSON backup as well.</div>'
  +'<div class="grid-2"><section class="panel"><h2>Export your data</h2><p class="muted">Download a spreadsheet-compatible CSV or a complete MoneyMate NZ JSON backup of the current local profile.</p>'
  +'<div class="btns">'+btn("Export transactions CSV","csv")+btn("Save full JSON backup","backup","secondary")+'</div></section>'
  +'<section class="panel"><h2>Restore a full backup</h2><p class="muted">Import a JSON backup saved on this laptop or exported from Android. It replaces all entries in this local profile, after confirmation.</p>'
@@ -138,20 +148,25 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Signing into the same email account on Android and web does <strong>not</strong> automatically sync finances. Each device retains its own private local records; use Export & backup for transfers.</div>';
+ html+='<div class="notice warning">Financial records stay local until secure cloud sync is enabled. Existing device records will not be overwritten silently. Keep a full JSON backup before activating cloud sync.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
-   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial entries are local to this browser and isolated under your Supabase user ID.</p>'
-    +'<div class="btns">'+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
+   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Local records are kept on this device. Secure cloud sync is optional and needs your consent before uploading financial data.</p>'
+    +'<div class="notice">'+escape(cloudStatus)+'</div>'
+    +'<div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))
+    +(cloudStatus.includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")
+    +(localEmpty(data)?btn("Copy guest records into this account","import-guest","secondary"):"")
+    +btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
     +formField("email","Email address","email","email",true,'autocomplete="username"')
     +formField("password","Password","password","password",true,'autocomplete="current-password"')
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Sign in</button></form>'
+    +(config?.googleEnabled?'<div class="btns">'+btn("Continue with Google","google-login","secondary")+'</div>':"")
     +'<div class="btns">'+btn("Forgot password","recover","ghost")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
-    +formField("new-password","Password (12–128 characters)","password","password",true,'autocomplete="new-password" minlength="12" maxlength="128"')
+    +formField("new-password","Password (8–128 characters)","password","password",true,'autocomplete="new-password" minlength="8" maxlength="128"')
     +'<label class="field"><span><input type="checkbox" id="terms" required> I have read the <a href="./privacy.html">privacy policy</a>.</span></label>'
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Create account</button></form>'
     +'<div class="btns">'+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
@@ -327,6 +342,11 @@ async function settingsAction(action){
   case "import":$("#import-file").click();break;
   case "delete-account":await deleteAccount();break;
   case "signout":await signout();break;
+  case "cloud-enable":await enableCloud();break;
+  case "cloud-sync":await syncCloud(true);break;
+  case "cloud-download":await chooseCloudCopy();break;
+  case "google-login":await signInWithGoogle();break;
+  case "import-guest":await copyGuest();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -372,7 +392,8 @@ async function attachSession(result){
    throw Error("Account service returned an invalid session.");
  auth={...result,expires_at:Math.floor(Date.now()/1000)+(result.expires_in||900)};
  await switchOwner(result.user.id);
- toast("Signed in. Local account records are now open.");
+ await cloudOnSignin();
+ toast("Signed in. Your account records are ready.");
 }
 async function accessToken(){
  if(!auth)throw Error("Sign in first.");
@@ -392,7 +413,7 @@ function attachAuthForms(){
  });});
  $("#signup-form")?.addEventListener("submit",e=>{e.preventDefault();withBusy(async()=>{
   const email=$("#new-email").value.trim(),password=$("#new-password").value;
-  if(password.length<12||password.length>128)throw Error("Use a password of 12–128 characters.");
+  if(password.length<8||password.length>128)throw Error("Use a password of 8–128 characters.");
   if(!$("#terms").checked)throw Error("Please accept the privacy policy.");
   $("#new-password").value="";
   await authApi("/auth/v1/signup","POST",{email,password});
@@ -461,7 +482,7 @@ function showResetModal(email){
  $("#editor-title").textContent="Reset password";
  $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true)
    +formField("modal-code","Reset code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"')
-   +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="12" maxlength="128"');
+   +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="8" maxlength="128"');
  $("#editor-hint").textContent="Enter the code sent to your email. No data is deleted.";
  $("#editor-fields").querySelector("#modal-email").value=email;
  $("#submit-modal").textContent="Reset password";
@@ -471,12 +492,210 @@ $("#editor-form").addEventListener("submit",event=>{if(modalKind!=="auth-reset")
  event.preventDefault();event.stopImmediatePropagation();
  const email=$("#modal-email").value.trim(),code=$("#modal-code").value.trim(),password=$("#modal-new-password").value;
  editor.close();withBusy(async()=>{
-  if(!/^\d{6,10}$/.test(code)||password.length<12)throw Error("Invalid code or password.");
+  if(!/^\d{6,10}$/.test(code)||password.length<8)throw Error("Invalid code or password.");
   const verified=await authApi("/auth/v1/verify","POST",{email,token:code,type:"recovery"});
   try{await authApi("/auth/v1/user","PUT",{password},verified.access_token);toast("Password updated. Please sign in.");}
   finally{await authApi("/auth/v1/logout?scope=global","POST",{},verified.access_token).catch(()=>{});}
  });
 },true);
+
+async function dbSyncMeta(id,write) {
+ const db=await dbOpen();
+ try {
+  return await new Promise((resolve,reject)=>{
+   const tx=db.transaction("sync",write===undefined?"readonly":"readwrite"),store=tx.objectStore("sync");
+   const req=write===undefined?store.get(id):store.put(write,id);
+   req.onsuccess=()=>resolve(write===undefined?req.result:write);
+   req.onerror=()=>reject(req.error);
+  });
+ }finally{db.close();}
+}
+const localEmpty=backup=>["transactions","budgets","goals","bills","recurring"].every(t=>backup[t].length===0);
+async function signature(backup){
+ const bytes=new TextEncoder().encode(JSON.stringify(strictData(backup)));
+ const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));
+ return Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function cloudRead() {
+ const result=await authApi("/rest/v1/rpc/read_account_snapshot","POST",{},await accessToken());
+ if(!Number.isSafeInteger(result.revision)||result.revision<0)throw Error("Cloud replied with an invalid revision.");
+ if(result.revision>0)strictData(result.data);
+ return result;
+}
+async function cloudCommit(revision,backup) {
+ const result=await authApi("/rest/v1/rpc/commit_account_snapshot","POST",{
+  p_expected_revision:revision,p_data:strictData(backup)
+ },await accessToken());
+ if(typeof result.success!=="boolean"||!Number.isSafeInteger(result.revision))throw Error("Cloud save returned an invalid reply.");
+ return result;
+}
+async function cloudOnSignin() {
+ const owner=auth.user.id;
+ cloudMeta=await dbSyncMeta(owner)||null;
+ if(cloudMeta?.enabled){await syncCloud(false);return;}
+ try {
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner)return;
+  if(remote.revision>0&&localEmpty(data)){
+   const restored=strictData(remote.data),hash=await signature(restored);
+   await dbWrite(owner,restored);data=restored;
+   cloudMeta={enabled:true,revision:remote.revision,digest:hash};
+   await dbSyncMeta(owner,cloudMeta);
+   cloudStatus="Cloud records recovered for your account. Sync enabled.";
+  }else if(remote.revision>0)cloudStatus="Cloud data already exists. Keep a backup before choosing which device's records to use.";
+  else cloudStatus="Cloud sync is off. Enable it to securely save your financial records online.";
+ }catch{
+  cloudStatus="Could not check cloud records. Your local data remains safe.";
+ }
+ render();
+}
+async function enableCloud() {
+ if(!auth)return;
+ if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ if(cloudBusy)return;
+ cloudBusy=true;
+ try{
+  const owner=auth.user.id,remote=await cloudRead();
+  if(auth?.user?.id!==owner||profile!==owner)return;
+  const localHash=await signature(data);
+  if(remote.revision>0){
+   const remoteData=strictData(remote.data);
+   if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
+    await dbWrite(owner,remoteData);data=remoteData;
+    cloudMeta={enabled:true,revision:remote.revision,digest:await signature(data)};
+    cloudStatus="Cloud records restored. Automatic sync is active.";
+   }else{
+    cloudStatus="Sync conflict: this browser and cloud both have different records. Export local JSON first; nothing was overwritten.";
+    toast(cloudStatus);render();return;
+   }
+  }else{
+   const result=await cloudCommit(0,data);
+   if(!result.success){cloudStatus="Another device created a cloud copy. Nothing was overwritten.";render();return;}
+   cloudMeta={enabled:true,revision:result.revision,digest:localHash};
+   cloudStatus="Cloud sync enabled. Your records are now backed up online.";
+  }
+  await dbSyncMeta(owner,cloudMeta);render();toast(cloudStatus);
+ }catch(error){cloudStatus="Could not enable cloud sync. Your existing local records remain safe.";errorMessage(error);render();}
+ finally{cloudBusy=false;}
+}
+async function syncCloud(showStatus=false) {
+ if(!auth||!cloudMeta?.enabled)return;
+ if(cloudBusy){cloudPending=true;return;}
+ cloudBusy=true;
+ const owner=auth.user.id;
+ try{
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner||profile!==owner)return;
+  const localHash=await signature(data);
+  const choice=decideSync({
+   enabled:cloudMeta.enabled,baseRevision:cloudMeta.revision,baseDigest:cloudMeta.digest,
+   localDigest:localHash,remoteRevision:remote.revision,localEmpty:localEmpty(data)
+  });
+  if(choice==="conflict"){
+   cloudStatus="Sync conflict: both devices changed records. Your local changes are safe; cloud was not overwritten. Export JSON before resolving.";
+  }else if(choice==="download"){
+   if(!remote.data){cloudStatus="Cloud copy not found. Local records are unchanged.";return;}
+   const restored=strictData(remote.data),hash=await signature(restored);
+   // Never overwrite local edits made while the request was in flight.
+   if(auth?.user?.id!==owner||await signature(data)!==localHash){cloudPending=true;return;}
+   await dbWrite(owner,restored);data=restored;
+   cloudMeta={enabled:true,revision:remote.revision,digest:hash};
+   await dbSyncMeta(owner,cloudMeta);
+   cloudStatus="Cloud changes recovered and saved to this device.";render();
+  }else if(choice==="upload"){
+   const captured=strictData(data),hash=await signature(captured);
+   const result=await cloudCommit(cloudMeta.revision,captured);
+   if(result.success){
+    cloudMeta={enabled:true,revision:result.revision,digest:hash};
+    await dbSyncMeta(owner,cloudMeta);
+    cloudStatus="Synced securely to your account.";
+    if(await signature(data)!==hash)cloudPending=true;
+   }else cloudStatus="Sync conflict: the cloud changed before this upload. Your local records were kept.";
+  }else cloudStatus="Up to date · securely saved to cloud.";
+  if(showStatus)toast(cloudStatus);
+  if(page==="account")render();
+ }catch(error){
+  cloudStatus="Offline or sync unavailable. Local records are safe; retry when connected.";
+  if(showStatus)errorMessage(error);
+  if(page==="account")render();
+ }finally{
+  cloudBusy=false;
+  if(cloudPending){cloudPending=false;setTimeout(()=>{if(auth?.user?.id===owner)void syncCloud(false);},0);}
+ }
+}
+async function chooseCloudCopy() {
+ if(!auth)return;
+ const owner=auth.user.id;
+ if(!window.confirm("First export a full JSON backup of your current local records. Continue only if you have saved it. This replaces the current browser profile with the cloud copy."))return;
+ if(!window.confirm("Final confirmation: REPLACE this device's local financial records with the saved cloud version?"))return;
+ try{
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner||!remote.data)throw Error("Cloud records unavailable.");
+  const safe=strictData(remote.data);
+  // Preserve the outgoing local records in a separate browser store for recovery.
+  await dbWrite(owner+"-before-cloud-"+Date.now(),data);
+  await dbWrite(owner,safe);data=safe;
+  cloudMeta={enabled:true,revision:remote.revision,digest:await signature(safe)};
+  await dbSyncMeta(owner,cloudMeta);
+  cloudStatus="Cloud copy restored. Previous local records remain in a safety copy in this browser.";
+  render();toast("Cloud copy restored.");
+ }catch(error){errorMessage(error);}
+}
+document.addEventListener("visibilitychange",()=>{
+  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
+});
+window.addEventListener("online",()=>{
+  if(auth&&cloudMeta?.enabled)void syncCloud(false);
+});
+// Check cloud periodically while the website remains active.
+setInterval(()=>{
+  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
+},45000);
+
+
+const GOOGLE_PKCE_KEY="MoneyMateNZ-google-login-verifier";
+function toBase64Url(buffer) {
+ return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+   .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function signInWithGoogle(){
+ if(!config?.googleEnabled)throw Error("Google sign-in is not configured yet.");
+ const bytes=new Uint8Array(48);crypto.getRandomValues(bytes);
+ const verifier=toBase64Url(bytes);
+ const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier));
+ const redirect=location.origin+location.pathname;
+ sessionStorage.setItem(GOOGLE_PKCE_KEY,verifier);
+ const address=new URL(config.url+"/auth/v1/authorize");
+ address.searchParams.set("provider","google");
+ address.searchParams.set("redirect_to",redirect);
+ address.searchParams.set("code_challenge",toBase64Url(digest));
+ address.searchParams.set("code_challenge_method","s256");
+ location.assign(address.toString());
+}
+async function finishGoogleSignin(){
+ const params=new URLSearchParams(location.search),code=params.get("code");
+ if(!code)return;
+ const verifier=sessionStorage.getItem(GOOGLE_PKCE_KEY);
+ sessionStorage.removeItem(GOOGLE_PKCE_KEY);
+ history.replaceState(null,"",location.pathname+(location.hash||""));
+ if(!verifier){toast("Google sign-in session expired. Start again from Account.");return;}
+ try {
+  const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
+  await attachSession(session);navigate("account");
+ }catch(error){errorMessage(error);}
+}
+
+
+async function copyGuest(){
+ if(!auth)return;
+ if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");
+ const original=await dbRead("guest");
+ if(localEmpty(original)){toast("No guest records to copy.");return;}
+ if(!confirm("Copy guest income, expenses, budgets, goals, bills and repeating entries into this empty account? The guest records are preserved, and cloud sync will only upload after your consent."))return;
+ await save(original);
+ toast("Guest records copied safely. The original guest profile was not changed.");
+}
+
 async function bootstrap(){
  try{
   await switchOwner("guest");
@@ -488,6 +707,7 @@ async function bootstrap(){
    const obj=await result.json();
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
+   await finishGoogleSignin();
   }catch{if(page==="account")render();}
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){
