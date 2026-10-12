@@ -331,7 +331,7 @@ async function settingsAction(action){
   case "resend":showAuthModal("resend");break;
   default:
    if(["income","expense","recurring","budget","edit-budget","goal","contribute","bill"].includes(action))
-     showModal(action,action==="edit-budget"?arguments[1]:arguments[1]);
+     showModal(action,arguments[1]);
  }
 }
 document.addEventListener("click",event=>{
@@ -426,7 +426,7 @@ function showAuthModal(kind){
  const fields=$("#editor-fields");
  const label=kind==="confirm"?"Confirm email":kind==="resend"?"Resend confirmation":"Reset password";
  $("#editor-title").textContent=label;
- $("#submit-modal").textContent=kind==="confirm"?"Confirm":kind==="resend"?"Send code":kind==="recover"?"Email code":"Save";
+ $("#submit-modal").textContent=kind==="confirm"?"Confirm":kind==="resend"?"Send code":kind==="recover"?"Send reset code":"Save";
  fields.innerHTML=formField("modal-email","Email address","email","email",true)
   +(kind==="confirm"?formField("modal-code","Email verification code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"'):"");
  $("#editor-hint").textContent="Email delivery depends on the project's configured SMTP provider.";
@@ -458,10 +458,12 @@ $("#editor-form").addEventListener("submit",event=>{
 function showResetModal(email){
  modalKind="auth-reset";
  $("#editor-title").textContent="Reset password";
- $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true,'value="'+escape(email)+'"')
+ $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true)
    +formField("modal-code","Reset code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"')
    +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="12" maxlength="128"');
  $("#editor-hint").textContent="Enter the code sent to your email. No data is deleted.";
+ $("#editor-fields").querySelector("#modal-email").value=email;
+ $("#submit-modal").textContent="Reset password";
  editor.showModal();
 }
 $("#editor-form").addEventListener("submit",event=>{if(modalKind!=="auth-reset")return;
