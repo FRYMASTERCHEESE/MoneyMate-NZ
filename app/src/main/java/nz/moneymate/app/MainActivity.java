@@ -34,12 +34,25 @@ public final class MainActivity extends Activity {
     private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private String documentOwner;
     private long lastAccountCheck;
+    private long lastCloudAttempt;
+    private boolean cloudBusy=false,ignoreNextAutoSync=false;
+    private String cloudStatus="Cloud syncing is not enabled";
+    private final android.os.Handler cloudTimer=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable periodicCloudCheck=new Runnable(){
+        @Override public void run() {
+            if(!isFinishing()&&!isDestroyed()) {
+                if(auth!=null&&auth.userId()!=null)requestCloudSync(false);
+                cloudTimer.postDelayed(this,45000L);
+            }
+        }
+    };
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
             applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
         store.postDueRecurring(); show("Home");
+        handleGoogleCallback(getIntent());
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
     private void applyTheme(ThemeConfig config) {
@@ -59,10 +72,14 @@ public final class MainActivity extends Activity {
                 }});
             });
         }
-        // Automatically check the public theme on launch/return, no account or financial data upload.
+        cloudTimer.removeCallbacks(periodicCloudCheck);
+        cloudTimer.postDelayed(periodicCloudCheck,45000L);
+        if(auth.userId()!=null)requestCloudSync(false);
+        // Automatically check the public theme on launch/return.
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
+    @Override protected void onPause(){cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}
     private void refreshTheme(boolean userRequested) {
         lastThemeCheck=System.currentTimeMillis();
         new Thread(()->{
@@ -152,6 +169,8 @@ public final class MainActivity extends Activity {
         }
         tabs.addView(links);frame.addView(tabs);tabs.post(()->tabs.scrollTo(Math.max(0,selectedTab[0].getLeft()-dp(16)),0));
         if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
+        if(ignoreNextAutoSync)ignoreNextAutoSync=false;
+        else if(auth.userId()!=null&&System.currentTimeMillis()-lastCloudAttempt>2500L)requestCloudSync(false);
     }
     private void title(String s) {content.addView(text(s,23,true));}
     private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
@@ -377,7 +396,7 @@ public final class MainActivity extends Activity {
     }
     private void exports() {
         title("Your data stays on this device");
-        line("Export or restore records for the current local profile only. Accounts do not sync financial records to the cloud.");
+        line("Export or restore records for the current profile. Signed-in users can enable cloud sync in Account. Please keep JSON backups; different edits made offline on two devices may need manual conflict resolution.");
         content.addView(button("Export CSV",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
@@ -408,20 +427,41 @@ public final class MainActivity extends Activity {
         if(requestCode>=100&&requestCode<=102)documentOwner=Store.databaseName(auth.userId());
         super.startActivityForResult(intent,requestCode);
     }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleGoogleCallback(intent);
+    }
+    private void handleGoogleCallback(Intent intent) {
+        if(intent==null||intent.getData()==null)return;
+        android.net.Uri uri=intent.getData();
+        if(!"moneymatenz".equals(uri.getScheme())||!"auth".equals(uri.getHost()))return;
+        intent.setData(null); // Consume deep-link code once; never keep in activity state.
+        String[] pkce=GoogleOAuth.consume(this,uri);
+        if(pkce==null){message("Google sign-in expired or could not be completed. Try again.");return;}
+        accountTask(()->auth.exchangeGooglePkce(pkce[0],pkce[1]),()->{
+            switchProfile();
+            message("Google account connected. Your existing records remain protected. You can enable cloud sync under Account.");
+        },false);
+    }
     private void switchProfile() {
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
     }
     private void account() {
         title("Your MoneyMate account");
-        line("Financial records stay on this device. Each signed-in account has a separate local profile. Accounts do not provide cloud backup or sync.");
+        line("Your records stay local unless you opt into secure Supabase cloud sync. When enabled, Android and the website can share records under the same verified account. Changes on two devices at once can cause a safe sync conflict.");
         content.addView(button("Privacy policy",()->new AlertDialog.Builder(this).setTitle("Privacy and accounts")
-            .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage. Signing out hides your account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
+            .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage unless you explicitly enable Supabase cloud sync. Cloud sync stores a separate copy in Sydney, Australia. Signing out hides your local account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
             .setPositiveButton("Read full policy",(d,w)->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html"))))
             .setNegativeButton("Close",null).show()));
         if(auth.userId()==null) {
             line("Local profile • your existing records are preserved");
             if(!AuthClient.configured()){line("Accounts are not available in this build yet. Local budgeting and backups still work.");return;}
             content.addView(button("Sign in",()->credentialsForm(false)));
+            if(BuildConfig.GOOGLE_ENABLED)content.addView(button("Continue with Google",()->{
+                try{startActivity(GoogleOAuth.start(this));}
+                catch(Exception failure){message("Google sign-in is unavailable. Please use email sign-in.");}
+            }));
             content.addView(button("Create account",()->credentialsForm(true)));
             content.addView(button("Confirm email",()->emailCodeForm(false)));
             content.addView(button("Resend confirmation code",()->emailRequest(false)));
@@ -429,6 +469,20 @@ public final class MainActivity extends Activity {
             content.addView(button("Reset password with email code",()->emailCodeForm(true)));
         } else {
             line("Signed in as "+auth.email());
+            CloudSync.Metadata cloud=CloudSync.metadata(this,auth.userId());
+            line(cloudStatus+" · "+(cloud.enabled?"Cloud sync enabled":"Cloud sync disabled"));
+            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->new AlertDialog.Builder(this)
+                .setTitle("Back up MoneyMate NZ to the cloud?")
+                .setMessage("Your private financial records will be uploaded to Supabase in Sydney, Australia and become available on your other devices using the same account. This is optional. Keep a full JSON backup first. Existing cloud data is never silently overwritten. Continue?")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Enable",(d,w)->{
+                    try {
+                        CloudSync.persist(this,auth.userId(),new CloudSync.Metadata(true,0,""));
+                        cloudStatus="Cloud sync opted in; checking for existing cloud records";
+                        requestCloudSync(true);
+                    }catch(Exception error){message("Cloud setup failed. Local data was not changed.");}
+                }).show()));
+            else content.addView(button("Sync records now",()->requestCloudSync(true)));
             content.addView(button("Sign out",()->new AlertDialog.Builder(this).setTitle("Sign out?")
                 .setMessage("Your account records remain on this device and are hidden until you sign in again. The separate local profile will open. If offline, this device still signs out; remote sessions may remain active.")
                 .setNegativeButton("Cancel",null).setPositiveButton("Sign out",(d,w)->accountTask(()->auth.signout(),()->{switchProfile();},true)).show()));
@@ -441,12 +495,54 @@ public final class MainActivity extends Activity {
             content.addView(button("Delete account permanently",()->deleteForm()));
         }
     }
+    private void requestCloudSync(boolean notify) {
+        final String user=auth.userId();
+        if(user==null||cloudBusy||accountBusy)return;
+        final CloudSync.Metadata baseline=CloudSync.metadata(this,user);
+        if(!baseline.enabled)return;
+        final String before;
+        try {before=store.backupJson();}
+        catch(Exception failure){if(notify)message("Could not read local data for syncing");return;}
+        cloudBusy=true;lastCloudAttempt=System.currentTimeMillis();
+        accountWorker.execute(()->{
+            CloudSync.Result result=null;String problem=null;
+            try{result=CloudSync.synchronize(auth,baseline,before);}
+            catch(Exception error){problem="Cloud unavailable. Your saved local records are safe.";}
+            final CloudSync.Result value=result;final String failure=problem;
+            runOnUiThread(()->{
+                try {
+                    if(isFinishing()||isDestroyed()||!user.equals(auth.userId()))return;
+                    if(failure!=null){cloudStatus=failure;if(notify)message(failure);return;}
+                    String fresh=store.backupJson();
+                    if(value.snapshot!=null) {
+                        // Never replace changes made on this phone while the request was running.
+                        if(!CloudSync.digest(fresh).equals(CloudSync.digest(before))){
+                            cloudStatus="Local records changed while syncing; download postponed.";
+                            return;
+                        }
+                        CloudSync.recoveryCopy(this,user,fresh);
+                        store.restoreJson(value.snapshot);
+                        CloudSync.persist(this,user,new CloudSync.Metadata(true,value.state.revision,CloudSync.digest(store.backupJson())));
+                    }else if(value.state!=baseline)CloudSync.persist(this,user,value.state);
+                    cloudStatus=value.message;
+                    if(notify||cloudStatus.toLowerCase(java.util.Locale.ROOT).contains("conflict"))
+                        Toast.makeText(this,cloudStatus,Toast.LENGTH_LONG).show();
+                    if(value.snapshot!=null||currentPage.equals("Account")){
+                        ignoreNextAutoSync=true;show(currentPage);
+                    }
+                }catch(Exception failure2){
+                    cloudStatus="Cloud sync could not be completed; local records kept.";
+                    if(notify)message(cloudStatus);
+                }finally{cloudBusy=false;}
+            });
+        });
+    }
     private LinearLayout form(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(dp(24),dp(8),dp(24),dp(8));return layout;}
     private EditText emailInput(LinearLayout layout){EditText field=input(layout,"Email",false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);return field;}
     private EditText passwordInput(LinearLayout layout,String hint){EditText field=input(layout,hint,false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return field;}
     private String emailValue(EditText field){String value=field.getText().toString().trim();if(!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches())throw new IllegalArgumentException("Enter a valid email address");return value;}
     private void credentialsForm(boolean signup) {
-        LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 12 characters)":"Password");
+        LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 8 characters)":"Password");
         CheckBox consent=new CheckBox(this);consent.setText("I have read the privacy policy and agree to create an account");if(signup)layout.addView(consent);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(signup?"Create account":"Sign in").setView(layout).setNegativeButton("Cancel",null).setPositiveButton(signup?"Create account":"Sign in",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
@@ -467,7 +563,7 @@ public final class MainActivity extends Activity {
     }
     private void emailCodeForm(boolean recovery) {
         LinearLayout layout=form();EditText email=emailInput(layout),code=input(layout,"Email code",false);code.setInputType(InputType.TYPE_CLASS_NUMBER);
-        EditText password=recovery?passwordInput(layout,"New password (at least 12 characters)"):null;
+        EditText password=recovery?passwordInput(layout,"New password (at least 8 characters)"):null;
         new AlertDialog.Builder(this).setTitle(recovery?"Reset password":"Confirm email").setView(layout).setNegativeButton("Cancel",null)
             .setPositiveButton(recovery?"Reset password":"Confirm",(d,w)->{try{
                 String address=emailValue(email),token=code.getText().toString().trim(),secret=recovery?password.getText().toString():"";

@@ -13,15 +13,12 @@
 
 New apps submitted after 31 August 2026 must target API 36 or higher. This code targets 36.
 
-**Account release gate:** Complete `ACCOUNTS_SETUP.md`, including dedicated project, custom SMTP, public client configuration, deployed deletion function, live email/deletion tests, private support email and final privacy retention details. Publish and test both the in-app deletion flow and `delete-account.html`, then provide the web deletion URL in Play Console. Financial records remain local, separated by account; no financial cloud sync is provided.
+**Account release gate:** Complete `ACCOUNTS_SETUP.md`, including dedicated project, custom SMTP, public client configuration, deployed deletion function, live email/deletion tests, private support email and final privacy retention details. Publish and test both the in-app deletion flow and `delete-account.html`, then provide the web deletion URL in Play Console. Cloud sync is implemented in the draft account-sync release and requires explicit opt-in. Do not describe it as production-ready until real email/Google login and two-device recovery/conflict tests pass.
 
-**Current limitations:** Notifications are not implemented. The release AAB is unsigned and not immediately uploadable; production ads and final policy details still need configuration. Store captures from 0.2.x predate the Account tab; recapture before publication.
+**Current limitations:** Notifications are not implemented. The regular CI release AAB is unsigned. A separately gated workflow can produce a signed production AAB once Play signing and real AdMob secrets are configured; production ads and final policy details still need configuration. Store captures from 0.2.x predate the Account tab; recapture before publication.
 
-## Signed production AAB (protected manual release)
-`.github/workflows/play-bundle.yml` produces a signed Play App Bundle **only** from main, when manually triggered and when privately configured with these GitHub Actions repository secrets:
+## Protected signed Play AAB workflow
 
-- `MONEYMATE_RELEASE_KEYSTORE_BASE64` (the developer's PKCS12 upload keystore, base64-encoded)
-- `MONEYMATE_RELEASE_STORE_PASSWORD`, `MONEYMATE_RELEASE_KEY_ALIAS`, `MONEYMATE_RELEASE_KEY_PASSWORD`
-- `MONEYMATE_ADMOB_APP_ID`, `MONEYMATE_ADMOB_BANNER_ID` (real IDs, not Google's testing IDs)
+The optional [signed Play bundle workflow](../.github/workflows/play-bundle.yml) runs only when manually started from `main`. It **fails closed** unless the following GitHub Actions repository secrets are set: `MONEYMATE_RELEASE_KEYSTORE_BASE64` (PKCS12 keystore, base64 encoded), `MONEYMATE_RELEASE_STORE_PASSWORD`, `MONEYMATE_RELEASE_KEY_ALIAS`, `MONEYMATE_RELEASE_KEY_PASSWORD`, `MONEYMATE_ADMOB_APP_ID`, and `MONEYMATE_ADMOB_BANNER_ID`. Do **not** add signing secrets to files, chat messages, commits, or issue reports.
 
-The workflow runs tests, validates the production ad identifiers, signs the `.aab`, and verifies its signature before uploading the artifact to private GitHub Actions storage for 7 days. It never automatically publishes to Google Play or charges for external services. Don't store private signing keys in the repository, commit history, issues, or chat. Local/debug CI continues with test AdMob IDs and an unsigned release AAB, independently of this manual action.
+It runs unit tests, signs an AAB using the private Play upload key, verifies the JAR signature and provides an artifact. The existing ordinary CI runs with Google's test AdMob IDs and an unsigned release AAB. A signed bundle is **not automatically submitted** to Google Play. Any key changes must respect Google's Play App Signing/upload key reset processes. The production build must be reviewed and tested before internal/closed/production release. No credentials are created or charged by this workflow.

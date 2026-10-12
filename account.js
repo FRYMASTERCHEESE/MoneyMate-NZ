@@ -32,7 +32,7 @@
   }));
   field('reset').addEventListener('click', () => run(async () => {
     const password=field('new-password').value,code=field('code').value.trim();
-    if(password.length<8||password.length>128||!/^\d{6,10}$/.test(code))throw Error('Enter the email code and a password of 8–128 characters.');
+    if(password.length<12||password.length>128||!/^\d{6,10}$/.test(code))throw Error('Enter the email code and a password of 12–128 characters.');
     field('new-password').value='';field('code').value='';
     const session=await call('/auth/v1/verify','POST',{email:field('email').value.trim(),token:code,type:'recovery'});
     try {await call('/auth/v1/user','PUT',{password},session.access_token);status('Password reset. Enter the new password above to delete your account.');}

@@ -70,6 +70,11 @@ public class AccountTest {
         AuthClient revoked=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new AuthClient.HttpFailure(401,"revoked");});
         revoked.signin("test@example.invalid","secret");assertFalse(revoked.validateOnline());
     }
+    @Test public void eightCharacterPasswordAcceptedButShorterRejected() {
+        AuthClient.checkPassword("eight888");
+        try { AuthClient.checkPassword("seven77"); fail("Too-short password accepted"); }
+        catch(IllegalArgumentException expected) {}
+    }
     @Test public void paidBillRecordsOneExpenseAndCanBeRemovedWithoutPaying() throws Exception {
         Context c=context();
         String owner="33333333-3333-4333-8333-333333333333";
@@ -94,5 +99,90 @@ public class AccountTest {
                 assertEquals(0,cursor.getLong(0));
             }
         } finally {c.deleteDatabase(file);}
+    }
+
+    @Test public void cloudDigestDetectsLocalChanges() throws Exception {
+        String before="local records",after="new local records";
+        assertEquals(CloudSync.digest(before),CloudSync.digest(before));
+        assertNotEquals(CloudSync.digest(before),CloudSync.digest(after));
+        CloudSync.Metadata state=new CloudSync.Metadata(false,0,"");
+        assertFalse(state.enabled);
+    }
+
+    @Test public void simulatedTwoDeviceSyncPreservesTransactionsAndAvoidsStaleOverwrite() throws Exception {
+        // Real SQLite records on two isolated local profiles; cloud uses the same
+        // revision-based protocol as Supabase but never contacts a production account.
+        Context c=context();
+        String phone="44444444-4444-4444-8444-444444444444";
+        String laptop="55555555-5555-4555-8555-555555555555";
+        c.deleteDatabase(Store.databaseName(phone));c.deleteDatabase(Store.databaseName(laptop));
+        try(Store first=new Store(c,phone);Store second=new Store(c,laptop)) {
+            final JSONObject[] cloud={null};
+            final long[] rev={0};
+            java.util.function.BiFunction<Long,JSONObject,JSONObject> commit=(expected,payload)->{
+                try {
+                    if(expected!=rev[0])return new JSONObject().put("success",false).put("revision",rev[0]);
+                    cloud[0]=new JSONObject(payload.toString());rev[0]++;
+                    return new JSONObject().put("success",true).put("revision",rev[0]);
+                } catch(Exception error){throw new RuntimeException(error);}
+            };
+            first.addTransaction("Income","Salary","Phone",12345,"2026-10-12");
+            CloudSync.Metadata firstState=new CloudSync.Metadata(true,0,"");
+            CloudSync.Result firstUpload=CloudSync.evaluate(firstState,rev[0],cloud[0],first.backupJson(),commit);
+            assertEquals("Synced securely",firstUpload.message);
+            firstState=firstUpload.state;assertEquals(1,rev[0]);
+            assertEquals(12345,first.sum("Income","2026-10"));
+
+            CloudSync.Metadata secondState=new CloudSync.Metadata(true,0,"");
+            CloudSync.Result secondDownload=CloudSync.evaluate(secondState,rev[0],cloud[0],second.backupJson(),commit);
+            assertNotNull(secondDownload.snapshot);
+            second.restoreJson(secondDownload.snapshot);
+            secondState=new CloudSync.Metadata(true,secondDownload.state.revision,CloudSync.digest(second.backupJson()));
+            assertEquals(12345,second.sum("Income","2026-10"));
+
+            second.addTransaction("Expense","Groceries","Laptop",2999,"2026-10-12");
+            CloudSync.Result secondUpload=CloudSync.evaluate(secondState,rev[0],cloud[0],second.backupJson(),commit);
+            assertEquals("Synced securely",secondUpload.message);
+            assertEquals(2,rev[0]);secondState=secondUpload.state;
+            CloudSync.Result firstDownload=CloudSync.evaluate(firstState,rev[0],cloud[0],first.backupJson(),commit);
+            assertNotNull(firstDownload.snapshot);
+            first.restoreJson(firstDownload.snapshot);
+            firstState=new CloudSync.Metadata(true,firstDownload.state.revision,CloudSync.digest(first.backupJson()));
+            assertEquals(2999,first.sum("Expense","2026-10"));
+            assertEquals(12345,first.sum("Income","2026-10"));
+
+            // Now each device changes its local data independently.
+            first.addTransaction("Expense","Transport","First",75,"2026-10-12");
+            second.addTransaction("Expense","Utilities","Second",200,"2026-10-12");
+            CloudSync.Result thirdUpload=CloudSync.evaluate(firstState,rev[0],cloud[0],first.backupJson(),commit);
+            assertEquals("Synced securely",thirdUpload.message);
+            CloudSync.Result stale=CloudSync.evaluate(secondState,rev[0],cloud[0],second.backupJson(),commit);
+            assertNull(stale.snapshot);
+            assertTrue(stale.message.contains("conflict"));
+            assertEquals(200,second.sum("Expense","2026-10")-2999);
+            assertEquals(75,first.sum("Expense","2026-10")-2999);
+        } finally {
+            c.deleteDatabase(Store.databaseName(phone));
+            c.deleteDatabase(Store.databaseName(laptop));
+        }
+    }
+
+    @Test public void googleOAuthCallbackMustMatchSchemePathExpireAndBeSingleUse() {
+        Context ctx=context();
+        android.content.SharedPreferences prefs=ctx.getSharedPreferences("moneymate_google_pkce",Context.MODE_PRIVATE);
+        prefs.edit().clear().putString("verifier", "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG")
+            .putLong("started",System.currentTimeMillis()).commit();
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("https://evil.invalid/auth/callback?code=stolencode")));
+        assertEquals("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",prefs.getString("verifier",null));
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://evil/callback?code=stolencode")));
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/notcallback?code=stolencode")));
+        String[] verified=GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code"));
+        assertNotNull(verified);
+        assertEquals("sample_authorization_code",verified[0]);
+        assertEquals("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",verified[1]);
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code")));
+        prefs.edit().putString("verifier", "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG")
+            .putLong("started",System.currentTimeMillis()-700000L).commit();
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code")));
     }
 }

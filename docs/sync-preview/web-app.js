@@ -166,7 +166,7 @@ function accountPage(){
     +'<div class="btns">'+btn("Forgot password","recover","ghost")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
-    +formField("new-password","Password (12–128 characters)","password","password",true,'autocomplete="new-password" minlength="12" maxlength="128"')
+    +formField("new-password","Password (8–128 characters)","password","password",true,'autocomplete="new-password" minlength="8" maxlength="128"')
     +'<label class="field"><span><input type="checkbox" id="terms" required> I have read the <a href="./privacy.html">privacy policy</a>.</span></label>'
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Create account</button></form>'
     +'<div class="btns">'+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
@@ -413,7 +413,7 @@ function attachAuthForms(){
  });});
  $("#signup-form")?.addEventListener("submit",e=>{e.preventDefault();withBusy(async()=>{
   const email=$("#new-email").value.trim(),password=$("#new-password").value;
-  if(password.length<12||password.length>128)throw Error("Use a password of 12–128 characters.");
+  if(password.length<8||password.length>128)throw Error("Use a password of 8–128 characters.");
   if(!$("#terms").checked)throw Error("Please accept the privacy policy.");
   $("#new-password").value="";
   await authApi("/auth/v1/signup","POST",{email,password});
@@ -482,7 +482,7 @@ function showResetModal(email){
  $("#editor-title").textContent="Reset password";
  $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true)
    +formField("modal-code","Reset code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"')
-   +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="12" maxlength="128"');
+   +formField("modal-new-password","New password (8–128 chars)","password","password",true,'minlength="8" maxlength="128"');
  $("#editor-hint").textContent="Enter the code sent to your email. No data is deleted.";
  $("#editor-fields").querySelector("#modal-email").value=email;
  $("#submit-modal").textContent="Reset password";
@@ -492,7 +492,7 @@ $("#editor-form").addEventListener("submit",event=>{if(modalKind!=="auth-reset")
  event.preventDefault();event.stopImmediatePropagation();
  const email=$("#modal-email").value.trim(),code=$("#modal-code").value.trim(),password=$("#modal-new-password").value;
  editor.close();withBusy(async()=>{
-  if(!/^\d{6,10}$/.test(code)||password.length<12)throw Error("Invalid code or password.");
+  if(!/^\d{6,10}$/.test(code)||password.length<8)throw Error("Invalid code or password.");
   const verified=await authApi("/auth/v1/verify","POST",{email,token:code,type:"recovery"});
   try{await authApi("/auth/v1/user","PUT",{password},verified.access_token);toast("Password updated. Please sign in.");}
   finally{await authApi("/auth/v1/logout?scope=global","POST",{},verified.access_token).catch(()=>{});}
