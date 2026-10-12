@@ -773,7 +773,7 @@ document.addEventListener("visibilitychange",()=>{
 });
 
 
-const GOOGLE_PKCE_KEY="MoneyMateNZ-google-login-verifier";
+
 
 window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
 setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
