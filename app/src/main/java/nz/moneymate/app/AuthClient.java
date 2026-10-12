@@ -68,6 +68,12 @@ final class AuthClient {
         }
         return session.getString("access_token");
     }
+    JSONObject pointsStatus() throws Exception {
+        return transport.call("/rest/v1/rpc/moneymate_points_status","POST",new JSONObject(),accessToken());
+    }
+    JSONObject claimDailyPoints() throws Exception {
+        return transport.call("/rest/v1/rpc/moneymate_claim_daily_points","POST",new JSONObject(),accessToken());
+    }
     JSONObject readAccountSnapshot() throws Exception {
         return transport.call("/rest/v1/rpc/read_account_snapshot","POST",new JSONObject(),accessToken());
     }

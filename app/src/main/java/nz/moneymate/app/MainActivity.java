@@ -37,6 +37,9 @@ public final class MainActivity extends Activity {
     private long lastCloudAttempt;
     private boolean cloudBusy=false,ignoreNextAutoSync=false;
     private String cloudStatus="Cloud syncing is not enabled";
+    private boolean rewardsBusy=false,rewardsRequested=false,dailyClaimed=false;
+    private long rewardPoints=-1;
+    private String rewardAccount=null;
     private final android.os.Handler cloudTimer=new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable periodicCloudCheck=new Runnable(){
         @Override public void run() {
@@ -158,12 +161,12 @@ public final class MainActivity extends Activity {
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Rewards": rewards();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(0);
         final View[] selectedTab=new View[1];
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account"}) {
+        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Rewards"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
             nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
@@ -445,8 +448,81 @@ public final class MainActivity extends Activity {
         },false);
     }
     private void switchProfile() {
+        rewardPoints=-1;rewardsRequested=false;rewardAccount=null;dailyClaimed=false;
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
     }
+
+    private void banking(){
+        title("Bank connections · NZ & Australia");
+        line("Automatic bank transaction imports are planned but NOT LIVE. No account is connected in this build.");
+        line("New Zealand: accredited Akahu open banking. Australia: Basiq Consumer Data Right. Both require approved provider onboarding before people can connect.");
+        content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
+        content.addView(button("About Basiq (Australia)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.basiq.io/")))));
+        line("Never enter banking passwords in MoneyMate NZ. Future consent will be read-only and revocable. AUD amounts must stay separate from NZD until currency conversion is supported.");
+    }
+    private void rewards(){
+        title("MoneyMate Points");
+        line("Collect 10 free points for one daily check-in (UTC). No spending or bank connection required. Points are not money and cannot be redeemed, withdrawn or transferred.");
+        final String id=auth.userId();
+        if(id==null){line("Sign in with Google or email to collect points.");content.addView(button("Open Account",()->show("Account")));return;}
+        if(!id.equals(rewardAccount)){rewardAccount=id;rewardPoints=-1;rewardsRequested=false;dailyClaimed=false;}
+        if(rewardPoints<0){
+            line(rewardsBusy?"Fetching your points balance…":"Points have not been loaded or the service is unavailable.");
+            content.addView(button("Refresh points",()->loadRewards(true)));
+            if(!rewardsRequested&&!rewardsBusy)loadRewards(false);
+            return;
+        }
+        line("Your points: "+rewardPoints);
+        line(dailyClaimed?"Today's points are collected; return after the next UTC date begins.":"Your daily 10 points are ready.");
+        if(!dailyClaimed)content.addView(button("Claim 10 points",()->claimRewards()));
+        content.addView(button("Refresh points",()->loadRewards(true)));
+    }
+    private void loadRewards(boolean notify){
+        final String id=auth.userId();if(id==null||rewardsBusy)return;
+        rewardsRequested=true;rewardsBusy=true;
+        accountWorker.execute(()->{
+            org.json.JSONObject answer=null;String issue=null;
+            try{answer=auth.pointsStatus();}catch(Exception ex){issue="Points service unavailable. Please retry later.";}
+            final org.json.JSONObject result=answer;final String failure=issue;
+            runOnUiThread(()->{
+                try{
+                    if(isFinishing()||isDestroyed()||!id.equals(auth.userId()))return;
+                    if(failure!=null){if(notify)message(failure);return;}
+                    if(result==null||result.optLong("points",-1)<0||result.optInt("daily_points")!=10)throw new IllegalStateException("Invalid points response");
+                    rewardAccount=id;rewardPoints=result.getLong("points");dailyClaimed=result.getBoolean("daily_claimed");
+                }catch(Exception ex){if(notify)message("Could not check your points.");}
+                finally{
+                    rewardsBusy=false;
+                    if(!isFinishing()&&!isDestroyed()&&id.equals(auth.userId())&&currentPage.equals("Rewards"))show("Rewards");
+                }
+            });
+        });
+    }
+    private void claimRewards(){
+        final String id=auth.userId();if(id==null||rewardsBusy)return;
+        rewardsBusy=true;
+        accountWorker.execute(()->{
+            org.json.JSONObject answer=null;String issue=null;
+            try{answer=auth.claimDailyPoints();}catch(Exception ex){issue="Could not claim points. Try again later.";}
+            final org.json.JSONObject result=answer;final String failure=issue;
+            runOnUiThread(()->{
+                try{
+                    if(isFinishing()||isDestroyed()||!id.equals(auth.userId()))return;
+                    if(failure!=null){message(failure);return;}
+                    int granted=result.getInt("awarded");
+                    if(result.optLong("points",-1)<0||(granted!=0&&granted!=10)||!result.getBoolean("daily_claimed"))
+                        throw new IllegalStateException("Invalid claim response");
+                    rewardAccount=id;rewardPoints=result.getLong("points");dailyClaimed=true;
+                    message(granted==10?"You earned 10 points!":"Today's points were already collected.");
+                }catch(Exception ex){message("Could not verify points balance.");}
+                finally{
+                    rewardsBusy=false;
+                    if(!isFinishing()&&!isDestroyed()&&id.equals(auth.userId())&&currentPage.equals("Rewards"))show("Rewards");
+                }
+            });
+        });
+    }
+
     private void account() {
         title("Your MoneyMate account");
         line("Your records stay local unless you opt into secure Supabase cloud sync. When enabled, Android and the website can share records under the same verified account. Changes on two devices at once can cause a safe sync conflict.");
