@@ -166,4 +166,23 @@ public class AccountTest {
             c.deleteDatabase(Store.databaseName(laptop));
         }
     }
+
+    @Test public void googleOAuthCallbackMustMatchSchemePathExpireAndBeSingleUse() {
+        Context ctx=context();
+        android.content.SharedPreferences prefs=ctx.getSharedPreferences("moneymate_google_pkce",Context.MODE_PRIVATE);
+        prefs.edit().clear().putString("verifier", "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG")
+            .putLong("started",System.currentTimeMillis()).commit();
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("https://evil.invalid/auth/callback?code=stolencode")));
+        assertEquals("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",prefs.getString("verifier",null));
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://evil/callback?code=stolencode")));
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/notcallback?code=stolencode")));
+        String[] verified=GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code"));
+        assertNotNull(verified);
+        assertEquals("sample_authorization_code",verified[0]);
+        assertEquals("abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",verified[1]);
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code")));
+        prefs.edit().putString("verifier", "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG")
+            .putLong("started",System.currentTimeMillis()-700000L).commit();
+        assertNull(GoogleOAuth.consume(ctx,android.net.Uri.parse("moneymatenz://auth/callback?code=sample_authorization_code")));
+    }
 }
