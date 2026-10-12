@@ -70,6 +70,11 @@ public class AccountTest {
         AuthClient revoked=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new AuthClient.HttpFailure(401,"revoked");});
         revoked.signin("test@example.invalid","secret");assertFalse(revoked.validateOnline());
     }
+    @Test public void eightCharacterPasswordAcceptedButShorterRejected() {
+        AuthClient.checkPassword("eight888");
+        try { AuthClient.checkPassword("seven77"); fail("Too-short password accepted"); }
+        catch(IllegalArgumentException expected) {}
+    }
     @Test public void paidBillRecordsOneExpenseAndCanBeRemovedWithoutPaying() throws Exception {
         Context c=context();
         String owner="33333333-3333-4333-8333-333333333333";

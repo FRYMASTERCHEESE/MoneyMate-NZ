@@ -446,7 +446,7 @@ public final class MainActivity extends Activity {
     private EditText passwordInput(LinearLayout layout,String hint){EditText field=input(layout,hint,false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return field;}
     private String emailValue(EditText field){String value=field.getText().toString().trim();if(!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches())throw new IllegalArgumentException("Enter a valid email address");return value;}
     private void credentialsForm(boolean signup) {
-        LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 12 characters)":"Password");
+        LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 8 characters)":"Password");
         CheckBox consent=new CheckBox(this);consent.setText("I have read the privacy policy and agree to create an account");if(signup)layout.addView(consent);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(signup?"Create account":"Sign in").setView(layout).setNegativeButton("Cancel",null).setPositiveButton(signup?"Create account":"Sign in",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
@@ -467,7 +467,7 @@ public final class MainActivity extends Activity {
     }
     private void emailCodeForm(boolean recovery) {
         LinearLayout layout=form();EditText email=emailInput(layout),code=input(layout,"Email code",false);code.setInputType(InputType.TYPE_CLASS_NUMBER);
-        EditText password=recovery?passwordInput(layout,"New password (at least 12 characters)"):null;
+        EditText password=recovery?passwordInput(layout,"New password (at least 8 characters)"):null;
         new AlertDialog.Builder(this).setTitle(recovery?"Reset password":"Confirm email").setView(layout).setNegativeButton("Cancel",null)
             .setPositiveButton(recovery?"Reset password":"Confirm",(d,w)->{try{
                 String address=emailValue(email),token=code.getText().toString().trim(),secret=recovery?password.getText().toString():"";

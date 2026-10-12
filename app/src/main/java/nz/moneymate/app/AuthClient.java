@@ -85,7 +85,7 @@ final class AuthClient {
         } catch(Exception offline) {return true;}
     }
     static void checkPassword(String password) {
-        if(password.length()<12||password.length()>128)throw new IllegalArgumentException("Use a password of 12–128 characters");
+        if(password.length()<8||password.length()>128)throw new IllegalArgumentException("Use a password of 8–128 characters");
     }
     private JSONObject credentials(String email,String password) throws Exception {
         return new JSONObject().put("email",email.trim()).put("password",password);
