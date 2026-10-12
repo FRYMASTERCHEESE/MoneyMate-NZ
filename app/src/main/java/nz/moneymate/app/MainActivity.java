@@ -247,6 +247,7 @@ public final class MainActivity extends Activity {
         content.addView(button("+ Income",()->transactionForm("Income")));
         content.addView(button("+ Expense",()->transactionForm("Expense")));
         content.addView(button("+ Set recurring payment",()->recurringForm()));
+        content.addView(button("Import NZD bank CSV for free",()->chooseBankCsv()));
         title("Recurring schedules");
         try(Cursor schedule=store.query("SELECT id,kind,category,cents,next_date,frequency FROM recurring ORDER BY next_date")) {
             if(schedule.getCount()==0)empty("Build a steady routine","Schedule regular income or expenses once.");
@@ -404,6 +405,7 @@ public final class MainActivity extends Activity {
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
         }));
+        content.addView(button("Import bank CSV (NZD, free)",()->chooseBankCsv()));
         content.addView(button("Backup all data (JSON)",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -426,8 +428,69 @@ public final class MainActivity extends Activity {
         }));
         line("Backups contain sensitive financial information. Store them securely. Restoring replaces current records.");
     }
+    /** The Android document picker reads a statement locally; no file or banking details
+     * are sent to a provider. Import is opt-in and additive, never a JSON restore.
+     */
+    private void chooseBankCsv(){
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES,new String[]{"text/csv","text/comma-separated-values","text/plain","application/vnd.ms-excel"});
+        startActivityForResult(intent,103);
+    }
+    private void previewBankCsv(Intent chosen) {
+        final String owner=Store.databaseName(auth.userId());
+        final String contents;
+        try(java.io.InputStream in=getContentResolver().openInputStream(chosen.getData())){
+            if(in==null)throw new java.io.IOException("Cannot read selected file");
+            java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
+            byte[] block=new byte[8192];int n;
+            while((n=in.read(block))!=-1){
+                if(buf.size()+n>2_000_000)throw new IllegalArgumentException("CSV is larger than 2 MB");
+                buf.write(block,0,n);
+            }
+            contents=new String(buf.toByteArray(),StandardCharsets.UTF_8);
+        }catch(Exception ex){message("Could not read bank CSV: "+ex.getMessage());return;}
+        EditText nickname=new EditText(this);
+        nickname.setSingleLine(true);nickname.setText("Everyday");
+        nickname.setHint("Account nickname, never account number");
+        nickname.setPadding(dp(24),dp(14),dp(24),dp(14));
+        new AlertDialog.Builder(this).setTitle("Free NZD bank statement import")
+          .setMessage("Choose a nickname for this account, such as Everyday or Savings. Reuse it when importing this account again; use different nicknames for separate bank accounts. This file must contain NZD, NOT AUD.")
+          .setView(nickname).setNegativeButton("Cancel",null)
+          .setPositiveButton("Preview",(dialog,button)->{
+              if(!owner.equals(Store.databaseName(auth.userId()))){message("Account changed. Choose the file again.");return;}
+              try{
+                  List<BankCsv.Entry> entries=BankCsv.parse(contents,nickname.getText().toString());
+                  Store.BankImportResult planned=store.importBankCsv(entries,true);
+                  if(planned.inserted==0){message("Nothing to add. "+planned.skipped+" bank entries were already imported.");return;}
+                  StringBuilder preview=new StringBuilder();
+                  preview.append(entries.size()).append(" rows in the CSV\n")
+                      .append(planned.inserted).append(" new NZD transactions\n")
+                      .append(planned.skipped).append(" existing duplicates\n\n");
+                  for(int i=0;i<Math.min(3,entries.size());i++){
+                      BankCsv.Entry row=entries.get(i);
+                      preview.append(row.date).append(" · ").append(row.kind).append(" · ")
+                          .append(MoneyMath.format(row.cents)).append(" · ").append(row.category).append("\n");
+                  }
+                  preview.append("\nImport only if the bank statement is NZD. Entries are added without deleting local records. Keep a JSON backup. Indistinguishable identical bank transactions can be hard to distinguish.");
+                  new AlertDialog.Builder(this).setTitle("Review bank CSV import")
+                    .setMessage(preview.toString()).setNegativeButton("Cancel",null)
+                    .setPositiveButton("Add transactions",(d,which)->{
+                        if(!owner.equals(Store.databaseName(auth.userId()))){
+                            message("Account changed. Bank CSV was not imported.");return;
+                        }
+                        try{
+                            Store.BankImportResult done=store.importBankCsv(entries,false);
+                            show("Transactions");
+                            message("Added "+done.inserted+" NZD transactions; skipped "+done.skipped+" duplicates. Existing records were not replaced.");
+                        }catch(Exception error){message("Bank CSV import failed safely: "+error.getMessage());}
+                    }).show();
+              }catch(Exception error){message("CSV preview failed: "+error.getMessage());}
+          }).show();
+    }
     @Override public void startActivityForResult(Intent intent,int requestCode) {
-        if(requestCode>=100&&requestCode<=102)documentOwner=Store.databaseName(auth.userId());
+        if(requestCode>=100&&requestCode<=103)documentOwner=Store.databaseName(auth.userId());
         super.startActivityForResult(intent,requestCode);
     }
     @Override protected void onNewIntent(Intent intent) {
@@ -454,7 +517,9 @@ public final class MainActivity extends Activity {
 
     private void banking(){
         title("Bank connections · NZ & Australia");
-        line("Automatic bank transaction imports are planned but NOT LIVE. No account is connected in this build.");
+        line("Free NZD bank statement imports are available from a CSV file. Download your statement from your bank and choose the file below. No bank login or provider fee is required.");
+        content.addView(button("Import NZD bank statement CSV",()->chooseBankCsv()));
+        line("Automatic bank connections are NOT LIVE. AUD statement imports are blocked until separate AUD budgets are available.");
         line("New Zealand: accredited Akahu open banking. Australia: Basiq Consumer Data Right. Both require approved provider onboarding before people can connect.");
         content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
         content.addView(button("About Basiq (Australia)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.basiq.io/")))));
@@ -721,7 +786,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed(){if(!accountBusy)super.onBackPressed();}
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
-        if(code>=100&&code<=102&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
+        if(code>=100&&code<=103&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
         if(result==RESULT_OK&&data!=null&&data.getData()!=null&&code==100){
             try(OutputStream out=getContentResolver().openOutputStream(data.getData())) {
                 out.write(String.join("\r\n",store.csvRows()).getBytes(StandardCharsets.UTF_8));
@@ -732,6 +797,8 @@ public final class MainActivity extends Activity {
                 out.write(store.backupJson().getBytes(StandardCharsets.UTF_8));
                 Toast.makeText(this,"Complete backup saved",Toast.LENGTH_LONG).show();
             }catch(Exception ex){Toast.makeText(this,"Backup failed: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
+        } else if(code==103&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
+            previewBankCsv(data);
         } else if(code==102&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
             try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())) {
                 java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
