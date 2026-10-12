@@ -1,4 +1,5 @@
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
+import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -11,6 +12,7 @@ const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals
 let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth=null,config=null,busy=false,searchTerm="";
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
+let refreshInFlight=null;
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
@@ -392,8 +394,8 @@ async function authApi(path,method="POST",body={},token=null){
    body:body===null?undefined:JSON.stringify(body),cache:"no-store",credentials:"omit",redirect:"error",signal:AbortSignal.timeout(20000)});
  if(!response.ok){
    if(response.status===429)throw Error("Too many attempts. Wait a little and try again.");
-   if(response.status===401||response.status===400)throw Error("Check your email, password or verification code.");
-   throw Error("Account request could not be completed ("+response.status+").");
+   if(response.status===401||response.status===400){const err=Error("Check your email, password or verification code.");err.httpStatus=response.status;throw err;}
+   const err=Error("Account request could not be completed ("+response.status+").");err.httpStatus=response.status;throw err;
  }
  const raw=await response.text();return raw?JSON.parse(raw):{};
 }
@@ -401,24 +403,68 @@ async function withBusy(operation){
  if(busy)return;busy=true;
  try{await operation();}catch(error){errorMessage(error);}finally{busy=false;}
 }
-async function attachSession(result){
- if(!result||!result.access_token||!result.refresh_token||!result.user||!/^[0-9a-f-]{36}$/i.test(result.user.id))
-   throw Error("Account service returned an invalid session.");
- auth={...result,expires_at:Math.floor(Date.now()/1000)+(result.expires_in||900)};
- adminOverview=null;
- await switchOwner(result.user.id);
- await refreshAdminOverview(true);
- toast("Signed in. Local account records are now open.");
+async function attachSession(result,{persist=true,checkAdmin=true}={}){
+ const next=normalizeLoginSession(result);
+ if(persist)await saveLoginSession(next);
+ auth=next;adminOverview=null;
+ await switchOwner(next.user.id);
+ if(checkAdmin)await refreshAdminOverview(true);
+ toast("Signed in. Your private account records are available.");
 }
 async function accessToken(){
  if(!auth)throw Error("Sign in first.");
- if(auth.expires_at<Date.now()/1000+60){
-   const previous=auth.user.id;
-   const updated=await authApi("/auth/v1/token?grant_type=refresh_token","POST",{refresh_token:auth.refresh_token});
-   if(updated.user?.id!==previous)throw Error("Account identity changed. Please sign in again.");
-   auth={...updated,expires_at:Math.floor(Date.now()/1000)+(updated.expires_in||900)};
+ if(auth.expires_at<=Math.floor(Date.now()/1000)+60){
+  if(!refreshInFlight)refreshInFlight=(async()=>{
+    const prior=auth,owner=prior.user.id;
+    const stored=await loadLoginSession().catch(()=>null);
+    if(stored?.user.id===owner&&stored.refresh_token!==prior.refresh_token&&stored.expires_at>Math.floor(Date.now()/1000)+60){
+      if(auth?.user.id===owner)auth=stored;
+      return;
+    }
+    const updated=normalizeLoginSession(
+      await authApi("/auth/v1/token?grant_type=refresh_token","POST",{refresh_token:prior.refresh_token}),owner);
+    if(auth?.user.id!==owner)throw Error("Account changed while refreshing");
+    await saveLoginSession(updated);
+    auth=updated;
+  })();
+  try{await refreshInFlight;}finally{refreshInFlight=null;}
  }
+ if(!auth)throw Error("Sign in first.");
  return auth.access_token;
+}
+async function restoreLogin(){
+ let saved;
+ try{saved=await loadLoginSession();}catch{
+  await clearLoginSession().catch(()=>{});
+  return;
+ }
+ if(!saved||auth)return;
+ try {
+  const now=Math.floor(Date.now()/1000);
+  if(saved.expires_at<=now+60){
+   saved=normalizeLoginSession(
+     await authApi("/auth/v1/token?grant_type=refresh_token","POST",{refresh_token:saved.refresh_token}),saved.user.id);
+  }else if(config){
+   const current=await authApi("/auth/v1/user","GET",null,saved.access_token);
+   if(current?.id!==saved.user.id)throw Object.assign(Error("Session identity changed"),{httpStatus:401});
+  }
+  if(!auth){
+   const destination=page;
+   await attachSession(saved);
+   if(destination!=="home")navigate(destination);
+  }
+ }catch(error){
+  if(sessionInvalidated(error.httpStatus)){
+   await clearLoginSession().catch(()=>{});
+   if(!auth){await switchOwner("guest");navigate("account");}
+   toast("Your previous login expired or was revoked. Please sign in again.");
+  }else if(!auth){
+   const destination=page;
+   await attachSession(saved,{persist:false,checkAdmin:false}).catch(()=>{});
+   if(auth&&destination!=="home")navigate(destination);
+   toast("Offline account opened. Reconnect to refresh your login.");
+  }
+ }
 }
 
 async function refreshAdminOverview(silent=true){
@@ -466,7 +512,10 @@ async function signout(){
   if(!confirm("Sign out? Your account records will stay on this browser and remain hidden until you sign in again."))return;
   try{await authApi("/auth/v1/logout?scope=global","POST",{},await accessToken());}
   catch{toast("Signed out locally. Remote sessions might still be active.");}
-  finally{adminOverview=null;auth=null;await switchOwner("guest");navigate("account");}
+  finally{
+   await clearLoginSession().catch(()=>toast("Could not clear saved login. Clear site data on shared devices."));
+   adminOverview=null;auth=null;await switchOwner("guest");navigate("account");
+  }
  });
 }
 async function deleteAccount(){
@@ -478,7 +527,8 @@ async function deleteAccount(){
  await withBusy(async()=>{
   const id=auth.user.id;
   await authApi("/functions/v1/delete-account","POST",{password},await accessToken());
-  await dbErase(id);adminOverview=null;auth=null;
+  await clearLoginSession().catch(()=>{});
+   await dbErase(id);adminOverview=null;auth=null;
   await switchOwner("guest");navigate("account");
   toast("Account deleted. Browser records for this account have also been removed.");
  });
@@ -583,12 +633,14 @@ async function bootstrap(){
    const obj=await result.json();
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
-    await finishGoogleSignin();
   }catch{if(page==="account")render();}
+  if(new URLSearchParams(location.search).has("code"))await finishGoogleSignin();
+  else await restoreLogin();
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){
   view.innerHTML='<div class="panel"><h2>Unable to open browser storage</h2><p>MoneyMate NZ needs browser storage enabled for safe offline financial records. Check private mode or storage restrictions and reload this page.</p></div>';
   errorMessage(error);
  }
 }
+window.addEventListener("online",()=>{if(auth)void accessToken().then(()=>refreshAdminOverview(true)).catch(()=>{});else void restoreLogin();});
 bootstrap();

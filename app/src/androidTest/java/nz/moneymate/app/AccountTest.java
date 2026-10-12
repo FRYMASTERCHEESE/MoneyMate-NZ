@@ -95,4 +95,26 @@ public class AccountTest {
             }
         } finally {c.deleteDatabase(file);}
     }
+
+    @Test public void clientRetainsEncryptedAccountAfterActivityRestartAndSignsOut() throws Exception {
+        Context c=context();
+        SessionVault vault=new SessionVault(c);vault.clear();
+        try {
+            AuthClient.Transport fake=(path,method,body,bearer)->{
+                if(path.contains("grant_type=password"))return session(A);
+                if(path.equals("/auth/v1/user"))return new JSONObject().put("id",A);
+                if(path.contains("/logout?scope=global"))return new JSONObject();
+                throw new java.io.IOException("Unexpected request");
+            };
+            AuthClient login=new AuthClient(c,fake);
+            assertNull(login.userId());
+            login.signin("test@example.invalid","long sample password");
+            assertEquals(A,login.userId());
+            AuthClient reopened=new AuthClient(c,fake);
+            assertEquals(A,reopened.userId());
+            assertTrue(reopened.validateOnline());
+            reopened.signout();
+            assertNull(new AuthClient(c,fake).userId());
+        } finally {vault.clear();}
+    }
 }
