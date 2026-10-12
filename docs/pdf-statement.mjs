@@ -1,3 +1,4 @@
+import {looksLikeAnzNzStatement,anzNzdStatementToCsv} from "./anz-statement.mjs";
 // Conservative free PDF statement importer. Financial PDFs are parsed ON THE DEVICE.
 // Only unambiguous NZD rows with a signed amount or explicit DR/CR are accepted.
 // Scanned PDFs may have OCR errors: always review a complete preview before committing.
@@ -9,6 +10,9 @@ const MAX_LINES=6000;
 const quote = s=>'"'+String(s).replace(/"/g,'""')+'"';
 export function pdfStatementToCsv(lines){
  if(!Array.isArray(lines)||!lines.length||lines.length>MAX_LINES)throw Error("PDF has no readable statement rows or is too long.");
+ // ANZ format has unsigned debit/credit columns. Reconcile against running balances;
+ // never fall back to guessing if its rows fail the ANZ safety checks.
+ if(looksLikeAnzNzStatement(lines))return anzNzdStatementToCsv(lines);
  const cleaned=lines.map(line=>typeof line==="string"?line.trim().replace(/\s+/g," "):"");
  if(cleaned.some(line=>/\bAUD\b|\bAustralian dollars?\b/i.test(line)))
    throw Error("This statement mentions AUD. MoneyMate NZ currently accepts NZD only.");
