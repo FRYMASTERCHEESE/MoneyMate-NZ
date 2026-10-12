@@ -17,6 +17,10 @@ test("only public configuration is sent to website",()=>{
   assert.deepEqual(Object.keys(c).sort(),["googleEnabled","publishableKey","url"]);
  }
 });
-test("Google login does not silently enable upload of finances",()=>{
- assert.doesNotMatch(read("docs/web-app.js"),/commit_account_snapshot|cloudCommit|cloud-enable/);
+test("Google login alone does not enable financial syncing",()=>{
+ const js=read("docs/web-app.js");
+ assert.match(js,/cloud-enable/);
+ assert.match(js,/if\(!auth\|\|!cloudMeta\?\.enabled\)return/);
+ assert.match(js,/if\(!window\.confirm\("Enable MoneyMate NZ cloud sync/);
+ assert.match(js,/restoreLogin\(\)/);
 });
