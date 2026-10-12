@@ -545,7 +545,7 @@ public final class MainActivity extends Activity {
     }
     private void loadTestAd() {
         MobileAds.initialize(this,status->{});
-        ad=new AdView(this);ad.setAdSize(AdSize.BANNER);ad.setAdUnitId("ca-app-pub-3940256099942544/6300978111");
+        ad=new AdView(this);ad.setAdSize(AdSize.BANNER);ad.setAdUnitId(BuildConfig.ADMOB_BANNER_ID);
         ad.loadAd(new AdRequest.Builder().build());
         if(root!=null)root.addView(ad);
     }
