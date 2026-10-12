@@ -95,4 +95,12 @@ public class AccountTest {
             }
         } finally {c.deleteDatabase(file);}
     }
+    @Test public void cloudConflictDoesNotChooseOverwrite() {
+        assertEquals("consent",CloudSync.decision(false,0,"a","b",0,false));
+        assertEquals("conflict",CloudSync.decision(true,1,"base","changed-locally",2,false));
+        assertEquals("download",CloudSync.decision(true,1,"same","same",2,false));
+        assertEquals("upload",CloudSync.decision(true,2,"old","new",2,false));
+        assertEquals("unchanged",CloudSync.decision(true,2,"same","same",2,false));
+    }
 }
+
