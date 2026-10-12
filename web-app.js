@@ -448,14 +448,20 @@ async function restoreLogin(){
    const current=await authApi("/auth/v1/user","GET",null,saved.access_token);
    if(current?.id!==saved.user.id)throw Object.assign(Error("Session identity changed"),{httpStatus:401});
   }
-  if(!auth)await attachSession(saved);
+  if(!auth){
+   const destination=page;
+   await attachSession(saved);
+   if(destination!=="home")navigate(destination);
+  }
  }catch(error){
   if(sessionInvalidated(error.httpStatus)){
    await clearLoginSession().catch(()=>{});
    if(!auth){await switchOwner("guest");navigate("account");}
    toast("Your previous login expired or was revoked. Please sign in again.");
   }else if(!auth){
+   const destination=page;
    await attachSession(saved,{persist:false,checkAdmin:false}).catch(()=>{});
+   if(auth&&destination!=="home")navigate(destination);
    toast("Offline account opened. Reconnect to refresh your login.");
   }
  }

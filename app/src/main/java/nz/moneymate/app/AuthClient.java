@@ -12,8 +12,9 @@ final class AuthClient {
     private final SessionVault vault;
     private final Transport transport;
     private JSONObject session;
-    AuthClient(Context context) {
-        vault=new SessionVault(context);transport=this::http;
+    AuthClient(Context context) {this(context,null);}
+    AuthClient(Context context,Transport customTransport) {
+        vault=new SessionVault(context);transport=customTransport==null?this::http:customTransport;
         try {String saved=vault.read();if(saved!=null){session=new JSONObject(saved);validateSession(session);}}
         catch(Exception error){session=null;vault.clear();}
     }
