@@ -161,6 +161,7 @@ function accountPage(){
     +formField("email","Email address","email","email",true,'autocomplete="username"')
     +formField("password","Password","password","password",true,'autocomplete="current-password"')
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Sign in</button></form>'
+    +(config?.googleEnabled?'<div class="btns">'+btn("Continue with Google","google-login","secondary")+'</div>':"")
     +'<div class="btns">'+btn("Forgot password","recover","ghost")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
@@ -343,6 +344,7 @@ async function settingsAction(action){
   case "cloud-enable":await enableCloud();break;
   case "cloud-sync":await syncCloud(true);break;
   case "cloud-download":await chooseCloudCopy();break;
+  case "google-login":await signInWithGoogle();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -641,6 +643,39 @@ document.addEventListener("visibilitychange",()=>{
  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
 });
 
+
+const GOOGLE_PKCE_KEY="MoneyMateNZ-google-login-verifier";
+function toBase64Url(buffer) {
+ return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+   .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function signInWithGoogle(){
+ if(!config?.googleEnabled)throw Error("Google sign-in is not configured yet.");
+ const bytes=new Uint8Array(48);crypto.getRandomValues(bytes);
+ const verifier=toBase64Url(bytes);
+ const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier));
+ const redirect=location.origin+location.pathname;
+ sessionStorage.setItem(GOOGLE_PKCE_KEY,verifier);
+ const address=new URL(config.url+"/auth/v1/authorize");
+ address.searchParams.set("provider","google");
+ address.searchParams.set("redirect_to",redirect);
+ address.searchParams.set("code_challenge",toBase64Url(digest));
+ address.searchParams.set("code_challenge_method","s256");
+ location.assign(address.toString());
+}
+async function finishGoogleSignin(){
+ const params=new URLSearchParams(location.search),code=params.get("code");
+ if(!code)return;
+ const verifier=sessionStorage.getItem(GOOGLE_PKCE_KEY);
+ sessionStorage.removeItem(GOOGLE_PKCE_KEY);
+ history.replaceState(null,"",location.pathname+(location.hash||""));
+ if(!verifier){toast("Google sign-in session expired. Start again from Account.");return;}
+ try {
+  const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
+  await attachSession(session);navigate("account");
+ }catch(error){errorMessage(error);}
+}
+
 async function bootstrap(){
  try{
   await switchOwner("guest");
@@ -652,6 +687,7 @@ async function bootstrap(){
    const obj=await result.json();
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
+   await finishGoogleSignin();
   }catch{if(page==="account")render();}
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){
