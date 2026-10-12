@@ -6,6 +6,14 @@
 - The same account ID yields the same points balance on Android and web. Anonymous users cannot call the rewards RPC. Clients cannot insert or edit balances directly.
 - Points are free participation markers. They are not cash, gambling, gift cards, transferable credit or redeemable rewards. There is no money reward or future cash promise. No bank account connection, payment, transaction spending, account balance, or income level is required to claim.
 
+## Fee-free bank statement CSV import (new, review branch)
+- On the website, go to **Bank connections → Choose bank CSV file**; on Android choose **Banking → Import NZD bank statement CSV** or **Export → Import bank CSV**.
+- Supports common CSV forms with Date, Amount and Description or Date, Debit, Credit and Details, plus MoneyMate NZ's own exported CSV. Text can include commas in quotes. Date format YYYY-MM-DD or DD/MM/YYYY; choose a short consistent account nickname that contains no bank account number.
+- Files stay on the device unless the user has enabled optional Supabase cloud sync. User gets a preview and must explicitly confirm. The importer appends rows, never replaces records, and suggests Groceries, Housing, Transport, Utilities, Health and Entertainment from descriptions (otherwise Other).
+- Re-importing a statement skips rows matching previously imported records under the **same nickname**. Deduplication uses date, amount, type, category, source nickname and description, including counts for identical rows. If two true transactions are indistinguishable they may not be reliably recognised; users should review the preview.
+- **Only NZD can enter existing NZD budgets. AUD statements are intentionally refused**, not converted. Australian multi-currency budgets and statement imports require a separate data model before launch.
+- No paid provider, bank password, direct bank API, or bank-connected automatic refresh is involved. New transactions will appear on other devices only if existing optional account cloud sync is enabled and conflict-free.
+
 ## NZ and Australia bank connections (preparation only)
 MoneyMate NZ does not have live bank data access yet. **Bank connections are not available** until the owner signs onboarding agreements and is approved by an accredited provider. The interface accurately displays this limitation.
 
