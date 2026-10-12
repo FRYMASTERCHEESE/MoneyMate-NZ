@@ -10,8 +10,10 @@ android {
         versionCode 4
         versionName '0.3.0'
         // Public client configuration only. Never provide a service-role or secret key.
-        def authUrl = providers.environmentVariable('MONEYMATE_SUPABASE_URL').getOrElse('')
-        def authKey = providers.environmentVariable('MONEYMATE_SUPABASE_PUBLISHABLE_KEY').getOrElse('')
+        def publicConfigFile = rootProject.file('docs/account-config.json')
+        def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
+        def authUrl = providers.environmentVariable('MONEYMATE_SUPABASE_URL').getOrElse('') ?: (publicConfig.url ?: '')
+        def authKey = providers.environmentVariable('MONEYMATE_SUPABASE_PUBLISHABLE_KEY').getOrElse('') ?: (publicConfig.publishableKey ?: '')
         if (authUrl && !(authUrl ==~ /https:\/\/[a-z0-9-]+\.supabase\.co/)) throw new GradleException('Invalid Supabase URL')
         if (authKey && !(authKey ==~ /sb_publishable_[A-Za-z0-9_-]+/)) throw new GradleException('Use a Supabase publishable key, never an admin key')
         buildConfigField 'String', 'SUPABASE_URL', '"' + authUrl + '"'
