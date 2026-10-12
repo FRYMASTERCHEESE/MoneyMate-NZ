@@ -68,6 +68,18 @@ final class AuthClient {
         }
         return session.getString("access_token");
     }
+    JSONObject readAccountSnapshot() throws Exception {
+        return transport.call("/rest/v1/rpc/read_account_snapshot","POST",new JSONObject(),accessToken());
+    }
+    JSONObject commitAccountSnapshot(long expectedRevision, JSONObject snapshot) throws Exception {
+        return transport.call("/rest/v1/rpc/commit_account_snapshot","POST",
+            new JSONObject().put("p_expected_revision",expectedRevision).put("p_data",snapshot),accessToken());
+    }
+    void exchangeGooglePkce(String code,String verifier) throws Exception {
+        if(code==null||code.length()<8||verifier==null||verifier.length()<32)throw new IOException("Invalid Google authorization");
+        save(transport.call("/auth/v1/token?grant_type=pkce","POST",
+            new JSONObject().put("auth_code",code).put("code_verifier",verifier),null));
+    }
     void signout() throws Exception {
         try{transport.call("/auth/v1/logout?scope=global","POST",new JSONObject(),accessToken());}finally{clear();}
     }
@@ -86,7 +98,7 @@ final class AuthClient {
         } catch(Exception offline) {return true;}
     }
     static void checkPassword(String password) {
-        if(password.length()<12||password.length()>128)throw new IllegalArgumentException("Use a password of 12–128 characters");
+        if(password.length()<8||password.length()>128)throw new IllegalArgumentException("Use a password of 8–128 characters");
     }
     private JSONObject credentials(String email,String password) throws Exception {
         return new JSONObject().put("email",email.trim()).put("password",password);
@@ -109,7 +121,7 @@ final class AuthClient {
             }
             try(InputStream input=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()) {
                 byte[] block=new byte[4096];int count;
-                while((count=input.read(block))!=-1){if(output.size()+count>65536)throw new IOException("Invalid response");output.write(block,0,count);}
+                while((count=input.read(block))!=-1){if(output.size()+count>1048576)throw new IOException("Invalid response");output.write(block,0,count);}
                 String result=output.toString("UTF-8");return result.trim().isEmpty()?new JSONObject():new JSONObject(result);
             }
         } finally {connection.disconnect();}
