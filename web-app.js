@@ -148,13 +148,13 @@ function accountPage(){
     +formField("email","Email address","email","email",true,'autocomplete="username"')
     +formField("password","Password","password","password",true,'autocomplete="current-password"')
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Sign in</button></form>'
-    +'<div class="btns">'+btn("Forgot password","recover","ghost")+'</div></section>'
+    +'<div class="btns">'+btn("Forgot password","recover","ghost")+(config?.googleEnabled?btn("Continue with Google","google-login","secondary"):"")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
     +formField("new-password","Password (8–128 characters)","password","password",true,'autocomplete="new-password" minlength="8" maxlength="128"')
     +'<label class="field"><span><input type="checkbox" id="terms" required> I have read the <a href="./privacy.html">privacy policy</a>.</span></label>'
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Create account</button></form>'
-    +'<div class="btns">'+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
+    +'<div class="btns">'+(config?.googleEnabled?btn("Sign up with Google","google-login","secondary"):"")+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
  }
  html+='<section class="panel" style="margin-top:20px"><h2>Local data & account safety</h2>'
   +'<p class="muted">When you sign out, account records stay in this browser but are hidden until you sign in again. The guest profile remains separately accessible. If you share a computer, use a private device account and a screen lock.</p>'
@@ -327,6 +327,7 @@ async function settingsAction(action){
   case "import":$("#import-file").click();break;
   case "delete-account":await deleteAccount();break;
   case "signout":await signout();break;
+  case "google-login":await signInWithGoogle();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -461,7 +462,7 @@ function showResetModal(email){
  $("#editor-title").textContent="Reset password";
  $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true)
    +formField("modal-code","Reset code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"')
-   +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="8" maxlength="128"');
+   +formField("modal-new-password","New password (8–128 chars)","password","password",true,'minlength="8" maxlength="128"');
  $("#editor-hint").textContent="Enter the code sent to your email. No data is deleted.";
  $("#editor-fields").querySelector("#modal-email").value=email;
  $("#submit-modal").textContent="Reset password";
@@ -477,6 +478,40 @@ $("#editor-form").addEventListener("submit",event=>{if(modalKind!=="auth-reset")
   finally{await authApi("/auth/v1/logout?scope=global","POST",{},verified.access_token).catch(()=>{});}
  });
 },true);
+const GOOGLE_PKCE_KEY="MoneyMateNZ-google-login-verifier";
+function toBase64Url(buffer) {
+ return btoa(String.fromCharCode(...new Uint8Array(buffer)))
+   .replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+async function signInWithGoogle(){
+ if(!config?.googleEnabled)throw Error("Google sign-in is not configured yet.");
+ const bytes=new Uint8Array(48);crypto.getRandomValues(bytes);
+ const verifier=toBase64Url(bytes);
+ const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(verifier));
+ const redirect=location.origin+location.pathname;
+ sessionStorage.setItem(GOOGLE_PKCE_KEY,verifier);
+ const address=new URL(config.url+"/auth/v1/authorize");
+ address.searchParams.set("provider","google");
+ address.searchParams.set("redirect_to",redirect);
+ address.searchParams.set("code_challenge",toBase64Url(digest));
+ address.searchParams.set("code_challenge_method","s256");
+ location.assign(address.toString());
+}
+async function finishGoogleSignin(){
+ const params=new URLSearchParams(location.search),code=params.get("code");
+ if(!code)return;
+ const verifier=sessionStorage.getItem(GOOGLE_PKCE_KEY);
+ sessionStorage.removeItem(GOOGLE_PKCE_KEY);
+ history.replaceState(null,"",location.pathname+(location.hash||""));
+ if(!verifier){toast("Google sign-in session expired. Start again from Account.");return;}
+ try {
+  const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
+  await attachSession(session);navigate("account");
+ }catch(error){errorMessage(error);}
+}
+
+
+
 async function bootstrap(){
  try{
   await switchOwner("guest");
@@ -488,6 +523,7 @@ async function bootstrap(){
    const obj=await result.json();
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
+    await finishGoogleSignin();
   }catch{if(page==="account")render();}
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){
