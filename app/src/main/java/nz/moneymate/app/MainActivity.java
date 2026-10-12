@@ -248,6 +248,7 @@ public final class MainActivity extends Activity {
         content.addView(button("+ Expense",()->transactionForm("Expense")));
         content.addView(button("+ Set recurring payment",()->recurringForm()));
         content.addView(button("Import NZD bank CSV for free",()->chooseBankCsv()));
+        content.addView(button("Import NZD bank PDF for free",()->chooseBankPdf()));
         title("Recurring schedules");
         try(Cursor schedule=store.query("SELECT id,kind,category,cents,next_date,frequency FROM recurring ORDER BY next_date")) {
             if(schedule.getCount()==0)empty("Build a steady routine","Schedule regular income or expenses once.");
@@ -406,6 +407,7 @@ public final class MainActivity extends Activity {
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
         }));
         content.addView(button("Import bank CSV (NZD, free)",()->chooseBankCsv()));
+        content.addView(button("Import bank PDF (NZD, free)",()->chooseBankPdf()));
         content.addView(button("Backup all data (JSON)",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
             i.addCategory(Intent.CATEGORY_OPENABLE);
@@ -431,6 +433,12 @@ public final class MainActivity extends Activity {
     /** The Android document picker reads a statement locally; no file or banking details
      * are sent to a provider. Import is opt-in and additive, never a JSON restore.
      */
+    private void chooseBankPdf(){
+        Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/pdf");
+        startActivityForResult(intent,104);
+    }
     private void chooseBankCsv(){
         Intent intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
@@ -490,7 +498,7 @@ public final class MainActivity extends Activity {
           }).show();
     }
     @Override public void startActivityForResult(Intent intent,int requestCode) {
-        if(requestCode>=100&&requestCode<=103)documentOwner=Store.databaseName(auth.userId());
+        if(requestCode>=100&&requestCode<=104)documentOwner=Store.databaseName(auth.userId());
         super.startActivityForResult(intent,requestCode);
     }
     @Override protected void onNewIntent(Intent intent) {
@@ -517,8 +525,9 @@ public final class MainActivity extends Activity {
 
     private void banking(){
         title("Bank connections · NZ & Australia");
-        line("Free NZD bank statement imports are available from a CSV file. Download your statement from your bank and choose the file below. No bank login or provider fee is required.");
+        line("Free NZD bank statement imports are available from CSV or PDF files. PDF text recognition runs on your device, but some layouts may fail. Neither requires a bank login inside MoneyMate NZ or provider fees.");
         content.addView(button("Import NZD bank statement CSV",()->chooseBankCsv()));
+        content.addView(button("Import NZD bank statement PDF (free)",()->chooseBankPdf()));
         line("Automatic bank connections are NOT LIVE. AUD statement imports are blocked until separate AUD budgets are available.");
         line("New Zealand: accredited Akahu open banking. Australia: Basiq Consumer Data Right. Both require approved provider onboarding before people can connect.");
         content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
@@ -533,9 +542,9 @@ public final class MainActivity extends Activity {
         line("Open Account to sign in using Google (when available) or email, or continue without signing in. To share your points or enable private cloud sync across devices, use the same account on Android and the website.");
         title("2. Add income or expenses");
         line("Home or Transactions → + Income / + Expense. Choose a category, enter the amount in NZD, and save the entry. Home displays monthly income, spending and balance.");
-        title("3. Import bank CSV for free");
-        line("Download a CSV statement in NZD from your bank's official website or app. Choose Banking → Import NZD bank statement CSV, or Transactions / Export → Import bank CSV. Enter a consistent nickname for the account (not its account number), review the preview and tap Add transactions. This never asks for bank passwords and does not download new transactions automatically.");
-        line("Only NZD files are supported. AUD files are blocked. Recognised duplicates are skipped but truly identical transactions can be hard to distinguish. Save a JSON backup before large imports.");
+        title("3. Import a bank CSV or PDF for free");
+        line("Download a NZD CSV or PDF statement from your bank. In Banking choose Import bank CSV or Import bank PDF. Use a consistent nickname, but never your actual bank account number. For PDFs, check every amount, date and transaction direction in the preview. This never connects to your bank or automatically downloads transactions.");
+        line("Only NZD files are supported; AUD is blocked. PDF recognition can fail on scanned or complex layouts and must be checked against the original. Save a JSON backup before a large import. Duplicate detection is best-effort.");
         title("4. Plan with budgets and goals");
         line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
         title("5. Earn your free daily points");
@@ -812,7 +821,7 @@ public final class MainActivity extends Activity {
     @Override public void onBackPressed(){if(!accountBusy)super.onBackPressed();}
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
-        if(code>=100&&code<=103&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
+        if(code>=100&&code<=104&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
         if(result==RESULT_OK&&data!=null&&data.getData()!=null&&code==100){
             try(OutputStream out=getContentResolver().openOutputStream(data.getData())) {
                 out.write(String.join("\r\n",store.csvRows()).getBytes(StandardCharsets.UTF_8));
@@ -825,6 +834,8 @@ public final class MainActivity extends Activity {
             }catch(Exception ex){Toast.makeText(this,"Backup failed: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
         } else if(code==103&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
             previewBankCsv(data);
+        } else if(code==104&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
+            PdfImport.start(this,store,()->Store.databaseName(auth.userId()),data,()->show("Transactions"));
         } else if(code==102&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
             try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())) {
                 java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
