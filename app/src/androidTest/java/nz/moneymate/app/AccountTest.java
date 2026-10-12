@@ -102,5 +102,52 @@ public class AccountTest {
         assertEquals("upload",CloudSync.decision(true,2,"old","new",2,false));
         assertEquals("unchanged",CloudSync.decision(true,2,"same","same",2,false));
     }
+    @Test public void cloudUploadAndConcurrentEditMustNeverOverwriteRemote() throws Exception {
+        Context ctx=context();
+        String user="44444444-4444-4444-8444-444444444444";
+        String name=Store.databaseName(user);
+        ctx.deleteDatabase(name);
+        CloudSync.clear(ctx,user);
+        final long[] rev={0L};
+        final JSONObject[] cloud={null};
+        AuthClient client=new AuthClient((path,method,body,bearer)->{
+            if(path.contains("grant_type=password"))return session(user);
+            if(path.endsWith("read_account_snapshot"))
+                return new JSONObject().put("revision",rev[0]).put("data",cloud[0]);
+            if(path.endsWith("commit_account_snapshot")){
+                long expected=body.getLong("p_expected_revision");
+                if(expected!=rev[0])return new JSONObject().put("success",false).put("revision",rev[0]);
+                cloud[0]=new JSONObject(body.getJSONObject("p_data").toString());
+                return new JSONObject().put("success",true).put("revision",++rev[0]);
+            }
+            throw new java.io.IOException("Unexpected cloud call: "+path);
+        });
+        try{
+            client.signin("owner@example.invalid","test-only-password");
+            try(Store data=new Store(ctx,user)){
+                data.addTransaction("Income","Salary","Original",10000,"2026-10-12");
+            }
+            CloudSync.Outcome enabled=CloudSync.enable(ctx,client,user);
+            assertFalse(enabled.conflict);
+            assertTrue(CloudSync.enabled(ctx,user));
+            assertEquals(1L,rev[0]);
+            try(Store data=new Store(ctx,user)){
+                data.addTransaction("Expense","Groceries","Local edit",2000,"2026-10-12");
+            }
+            // Another logged-in device has committed a newer server revision.
+            rev[0]=2L;
+            CloudSync.Outcome conflict=CloudSync.sync(ctx,client,user);
+            assertTrue(conflict.conflict);
+            assertEquals(2L,rev[0]); // no upload from the stale phone
+            try(Store data=new Store(ctx,user)){
+                assertEquals(10000L,data.sum("Income","2026-10"));
+                assertEquals(2000L,data.sum("Expense","2026-10"));
+            }
+        }finally{
+            CloudSync.clear(ctx,user);
+            ctx.deleteDatabase(name);
+        }
+    }
+
 }
 
