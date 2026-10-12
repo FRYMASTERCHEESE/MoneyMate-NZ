@@ -1,3 +1,4 @@
+import {planBankCsv} from "./bank-csv.mjs";
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 import {decideSync} from "./sync-policy.mjs";
@@ -100,7 +101,7 @@ function renderRecords(){
 }
 function transactions(){
  let markup=heading("Transactions","Track every dollar coming in and going out.");
- markup+='<div class="btns">'+btn("+ Income","income")+btn("+ Expense","expense","secondary")+btn("Add repeating entry","recurring","secondary")+'</div>';
+ markup+='<div class="btns">'+btn("+ Income","income")+btn("+ Expense","expense","secondary")+btn("Add repeating entry","recurring","secondary")+btn("Import bank CSV (free)","bank-csv","secondary")+'</div>';
  markup+='<section class="panel"><div class="section-row" style="margin-top:0"><h2 style="margin:0">Transaction history</h2><span class="tag">Last 300 entries</span></div>'
  +'<label class="field"><span>Search date, category, type or note</span><input class="search" id="history-search" type="search" placeholder="Search transactions…" value="'+escape(searchTerm)+'"></label><div id="transaction-records"></div></section>';
  markup+='<section class="panel" style="margin-top:19px"><h2>Recurring schedules</h2>'
@@ -180,7 +181,8 @@ function rewardsPage(){
  return html+'<section class="panel"><h2>Fair rewards</h2><p class="muted">One 10-point claim per authenticated account per UTC day, protected by the server. These points have no monetary value or redemption entitlement.</p></section>';
 }
 function bankingPage(){
- return heading("Bank connections","Consent-based NZ and Australian account imports are being prepared.")
+ return heading("Bank connections","Import NZD bank statements free, or check future NZ and Australian automatic bank connections.")
+  +'<section class="panel"><h2>Free bank CSV import · NZD</h2><p>Download a CSV statement from your bank, then choose the file. This works offline, requires no bank access and costs $0 in provider fees.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
  +'<div class="notice warning"><strong>Not available yet.</strong> Actual bank linking must await provider onboarding, security checks and user consent. Never enter banking passwords into MoneyMate NZ. The app does not currently import bank transactions.</div>'
  +'<div class="grid-2"><section class="panel"><h2>🇳🇿 New Zealand</h2><p>Planned: Akahu official open-banking connection, depending on bank availability.</p><span class="tag">Provider approval required</span><p><a href="https://www.akahu.nz/" target="_blank" rel="noopener noreferrer">About Akahu ↗</a></p></section>'
  +'<section class="panel"><h2>🇦🇺 Australia</h2><p>Planned: Basiq Consumer Data Right account connection with bank-approved consent.</p><span class="tag">Provider approval required</span><p><a href="https://www.basiq.io/" target="_blank" rel="noopener noreferrer">About Basiq ↗</a></p></section></div>'
@@ -389,6 +391,29 @@ function download(filename,content,type){
  link.href=url;link.download=filename;link.click();
  setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+async function importBankCsvFile(file){
+ if(!file)return;
+ const owner=profile,baseline=JSON.stringify(data);
+ try{
+  if(file.size>2000000)throw Error("Bank CSV is larger than 2 MB.");
+  const label=window.prompt("Account nickname (for example: Everyday). Reuse the same nickname every time you import this account's statements. Do not enter your account number.","Everyday");
+  if(label===null)return;
+  const parsed=planBankCsv(await file.text(),data.transactions,label);
+  if(owner!==profile||baseline!==JSON.stringify(data))throw Error("Your records changed while reading this file. Please try again.");
+  if(!parsed.toAdd.length){toast("No new records: "+parsed.skipped+" already imported.");return;}
+  if(data.transactions.length+parsed.toAdd.length>100000)throw Error("Too many transactions. Export a JSON backup before continuing.");
+  const sample=parsed.toAdd.slice(0,3).map(r=>r.date+" · "+r.kind+" · "+nzd(r.cents)+" · "+r.category).join("\n");
+  const message="Preview: "+parsed.total+" statement rows; "+parsed.skipped+" existing duplicates; "+parsed.toAdd.length+" new NZD transactions.\n\n"+sample+"\n\nConfirm the entire file is NZD, not AUD. Import into the CURRENT profile? Records will be ADDED, never replaced. If two bank entries are completely identical, duplicates may not be distinguishable. Keep a full JSON backup.";
+  if(!window.confirm(message))return;
+  if(owner!==profile||baseline!==JSON.stringify(data))throw Error("Your financial records changed during preview. Please retry.");
+  const next=structuredClone(data);
+  for(const row of parsed.toAdd)next.transactions.push({id:nextId(next.transactions),...row});
+  strictData(next);
+  await save(next);
+  toast("Imported "+parsed.toAdd.length+" NZD transactions. Skipped "+parsed.skipped+" duplicates.");
+ }catch(error){errorMessage(error);}
+ finally{$("#bank-csv-file").value="";}
+}
 async function importFile(file){
  if(!file)return;
  try{
@@ -408,6 +433,7 @@ async function settingsAction(action){
   case "csv":download("MoneyMate-NZ-"+today()+".csv",csv(data),"text/csv;charset=utf-8");break;
   case "backup":download("MoneyMate-NZ-backup-"+today()+".json",JSON.stringify(data,null,2),"application/json");break;
   case "import":$("#import-file").click();break;
+  case "bank-csv":$("#bank-csv-file").click();break;
   case "delete-account":await deleteAccount();break;
   case "signout":await signout();break;
   case "go-admin":if(adminOverview)navigate("admin");break;
@@ -445,6 +471,7 @@ $("#editor-form").addEventListener("submit",submitModal);
 $("#cancel-modal").addEventListener("click",()=>editor.close());
 $("#dismiss-modal").addEventListener("click",()=>editor.close());
 $("#import-file").addEventListener("change",e=>importFile(e.target.files[0]));
+$("#bank-csv-file").addEventListener("change",e=>importBankCsvFile(e.target.files[0]));
 window.addEventListener("hashchange",()=>{const p=location.hash.replace(/^#/,"");if(p!==page&&pages.includes(p)){page=p;render();}});
 function requireConfig(){if(!config)throw Error("Account service is not configured. Local budgeting still works.");}
 async function authApi(path,method="POST",body={},token=null){
