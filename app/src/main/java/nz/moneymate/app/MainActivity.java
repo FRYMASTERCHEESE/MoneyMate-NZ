@@ -37,6 +37,15 @@ public final class MainActivity extends Activity {
     private long lastCloudAttempt;
     private boolean cloudBusy=false,ignoreNextAutoSync=false;
     private String cloudStatus="Cloud syncing is not enabled";
+    private final android.os.Handler cloudTimer=new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable periodicCloudCheck=new Runnable(){
+        @Override public void run() {
+            if(!isFinishing()&&!isDestroyed()) {
+                if(auth!=null&&auth.userId()!=null)requestCloudSync(false);
+                cloudTimer.postDelayed(this,45000L);
+            }
+        }
+    };
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
@@ -63,11 +72,14 @@ public final class MainActivity extends Activity {
                 }});
             });
         }
+        cloudTimer.removeCallbacks(periodicCloudCheck);
+        cloudTimer.postDelayed(periodicCloudCheck,45000L);
         if(auth.userId()!=null)requestCloudSync(false);
         // Automatically check the public theme on launch/return.
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
+    @Override protected void onPause(){cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}
     private void refreshTheme(boolean userRequested) {
         lastThemeCheck=System.currentTimeMillis();
         new Thread(()->{
