@@ -34,6 +34,9 @@ public final class MainActivity extends Activity {
     private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private String documentOwner;
     private long lastAccountCheck;
+    private boolean cloudWorkerActive=false;
+    private long lastCloudCheck=0L;
+    private String cloudStatus="Cloud sync is off";
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
@@ -62,6 +65,7 @@ public final class MainActivity extends Activity {
         // Automatically check the public theme on launch/return, no account or financial data upload.
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
+        scheduleCloudSync();
     }
     private void refreshTheme(boolean userRequested) {
         lastThemeCheck=System.currentTimeMillis();
@@ -152,6 +156,7 @@ public final class MainActivity extends Activity {
         }
         tabs.addView(links);frame.addView(tabs);tabs.post(()->tabs.scrollTo(Math.max(0,selectedTab[0].getLeft()-dp(16)),0));
         if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
+        scheduleCloudSync();
     }
     private void title(String s) {content.addView(text(s,23,true));}
     private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
@@ -377,7 +382,7 @@ public final class MainActivity extends Activity {
     }
     private void exports() {
         title("Your data stays on this device");
-        line("Export or restore records for the current local profile only. Accounts do not sync financial records to the cloud.");
+        line("Export or restore records for the current local profile. Signed-in users can opt in to secure cloud sync in Account; an external JSON backup is still recommended.");
         content.addView(button("Export CSV",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
@@ -413,7 +418,7 @@ public final class MainActivity extends Activity {
     }
     private void account() {
         title("Your MoneyMate account");
-        line("Financial records stay on this device. Each signed-in account has a separate local profile. Accounts do not provide cloud backup or sync.");
+        line("Your financial records are saved on this device. Secure account cloud sync is optional and requires your consent. Android and web share records only after both devices enable sync. Existing records are never silently overwritten.");
         content.addView(button("Privacy policy",()->new AlertDialog.Builder(this).setTitle("Privacy and accounts")
             .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage. Signing out hides your account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
             .setPositiveButton("Read full policy",(d,w)->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html"))))
@@ -429,6 +434,10 @@ public final class MainActivity extends Activity {
             content.addView(button("Reset password with email code",()->emailCodeForm(true)));
         } else {
             line("Signed in as "+auth.email());
+            line(cloudStatus);
+            if(!CloudSync.enabled(this,auth.userId()))content.addView(button("Enable secure cloud sync",()->enableCloudDialog()));
+            else content.addView(button("Sync now",()->syncCloudNow()));
+            content.addView(button("Restore cloud copy after backing up local data",()->restoreCloudDialog()));
             content.addView(button("Sign out",()->new AlertDialog.Builder(this).setTitle("Sign out?")
                 .setMessage("Your account records remain on this device and are hidden until you sign in again. The separate local profile will open. If offline, this device still signs out; remote sessions may remain active.")
                 .setNegativeButton("Cancel",null).setPositiveButton("Sign out",(d,w)->accountTask(()->auth.signout(),()->{switchProfile();},true)).show()));
@@ -475,6 +484,65 @@ public final class MainActivity extends Activity {
                 accountTask(()->{if(recovery)auth.reset(address,token,secret);else auth.confirm(address,token);},()->message(recovery?"Password reset. Sign in with your new password.":"Email confirmed. You can now sign in."),false);
             }catch(Exception error){message(error.getMessage());}}).show();
     }
+
+    private void enableCloudDialog() {
+        String uid=auth.userId();
+        if(uid==null)return;
+        new AlertDialog.Builder(this).setTitle("Enable secure cloud sync?")
+            .setMessage("MoneyMate NZ will upload your income, expenses, budgets, bills, goals and recurring entries to your private Supabase account hosted in Australia. Records remain available locally. Export a full JSON backup first. Existing cloud data will never be overwritten without your explicit choice. Continue?")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Enable", (d,w)-> {
+                final CloudSync.Outcome[] result=new CloudSync.Outcome[1];
+                accountTask(()->result[0]=CloudSync.enable(this,auth,uid),()->{
+                    cloudStatus=result[0].message;show("Account");message(cloudStatus);
+                },false);
+            }).show();
+    }
+    private void syncCloudNow() {
+        String uid=auth.userId();if(uid==null)return;
+        final CloudSync.Outcome[] result=new CloudSync.Outcome[1];
+        accountTask(()->result[0]=CloudSync.sync(this,auth,uid),()->{
+            cloudStatus=result[0].message;show("Account");message(cloudStatus);
+        },false);
+    }
+    private void restoreCloudDialog() {
+        String uid=auth.userId();if(uid==null)return;
+        new AlertDialog.Builder(this).setTitle("Restore your cloud records?")
+            .setMessage("Save a full JSON backup of this account using Export first. Restoring will REPLACE the current local profile with the cloud copy. A private recovery copy is also kept in app storage, but uninstalling removes it. Continue only if your external backup is safe.")
+            .setNegativeButton("Cancel",null).setPositiveButton("Continue",(d,w)->
+                new AlertDialog.Builder(this).setTitle("Final confirmation")
+                    .setMessage("Replace local account records with the online version? This does not modify your cloud copy.")
+                    .setNegativeButton("Cancel",null).setPositiveButton("Restore",(d2,w2)-> {
+                        final CloudSync.Outcome[] result=new CloudSync.Outcome[1];
+                        accountTask(()->result[0]=CloudSync.restoreCloud(this,auth,uid),()->{
+                            cloudStatus=result[0].message;show("Account");message(cloudStatus);
+                        },false);
+                    }).show()
+            ).show();
+    }
+    private void scheduleCloudSync() {
+        String uid=auth==null?null:auth.userId();
+        if(uid==null||accountBusy||cloudWorkerActive||!CloudSync.enabled(this,uid))return;
+        if(System.currentTimeMillis()-lastCloudCheck<5000)return;
+        if(BuildConfig.DEBUG&&getIntent()!=null&&getIntent().getBooleanExtra("captureMode",false))return;
+        lastCloudCheck=System.currentTimeMillis();
+        final Store prior=store;cloudWorkerActive=true;
+        accountWorker.execute(()->{
+            CloudSync.Outcome result=null;
+            try{result=CloudSync.sync(this,auth,uid);}
+            catch(Exception ignored){/* Offline or configuration failure: local records remain untouched. */}
+            final CloudSync.Outcome completed=result;
+            runOnUiThread(()->{
+                cloudWorkerActive=false;
+                if(isFinishing()||isDestroyed()||store!=prior||!uid.equals(auth.userId()))return;
+                if(completed!=null){
+                    cloudStatus=completed.message;
+                    if(completed.changedLocal)show(currentPage);
+                    else if(completed.conflict)Toast.makeText(this,"Cloud conflict: local records are safe. Open Account to resolve.",Toast.LENGTH_LONG).show();
+                }else cloudStatus="Could not reach cloud. Your records are saved locally and will retry.";
+            });
+        });
+    }
     private void deleteForm() {
         LinearLayout layout=form();layout.addView(text("Permanently deletes your Supabase account and this account's local records on this device. Other devices and exported files must be cleared separately. Your original local profile is preserved. This cannot be undone.",14,false));
         EditText password=passwordInput(layout,"Current password"),confirm=input(layout,"Type DELETE",false);
@@ -482,7 +550,7 @@ public final class MainActivity extends Activity {
             if(!"DELETE".equals(confirm.getText().toString())){message("Type DELETE to confirm");return;}
             String secret=password.getText().toString(),database=Store.databaseName(auth.userId());password.setText("");
             accountTask(()->auth.deleteAccount(secret),()->{
-                store.close();auth.clear();deleteDatabase(database);store=new Store(this);show("Account");message("Account deleted. Exported files and records on other devices must be removed separately.");
+                store.close();CloudSync.clear(this,auth.userId());auth.clear();deleteDatabase(database);store=new Store(this);show("Account");message("Account deleted. Exported files and records on other devices must be removed separately.");
             },false);
         }).show();
     }

@@ -70,6 +70,14 @@ final class AuthClient {
     void signout() throws Exception {
         try{transport.call("/auth/v1/logout?scope=global","POST",new JSONObject(),accessToken());}finally{clear();}
     }
+    /** Restricted account RPCs; the server infers ownership from this user's verified JWT. */
+    JSONObject snapshotRead() throws Exception {
+        return transport.call("/rest/v1/rpc/read_account_snapshot","POST",new JSONObject(),accessToken());
+    }
+    JSONObject snapshotCommit(long expectedRevision,JSONObject data) throws Exception {
+        return transport.call("/rest/v1/rpc/commit_account_snapshot","POST",
+            new JSONObject().put("p_expected_revision",expectedRevision).put("p_data",data),accessToken());
+    }
     void deleteAccount(String password) throws Exception {
         // Reauthenticate without replacing the current session; server checks the password too.
         transport.call("/functions/v1/delete-account","POST",new JSONObject().put("password",password),accessToken());
@@ -108,7 +116,7 @@ final class AuthClient {
             }
             try(InputStream input=connection.getInputStream();ByteArrayOutputStream output=new ByteArrayOutputStream()) {
                 byte[] block=new byte[4096];int count;
-                while((count=input.read(block))!=-1){if(output.size()+count>65536)throw new IOException("Invalid response");output.write(block,0,count);}
+                while((count=input.read(block))!=-1){if(output.size()+count>(path.startsWith("/rest/v1/rpc/read_account_snapshot")?600000:65536))throw new IOException("Invalid response");output.write(block,0,count);}
                 String result=output.toString("UTF-8");return result.trim().isEmpty()?new JSONObject():new JSONObject(result);
             }
         } finally {connection.disconnect();}
