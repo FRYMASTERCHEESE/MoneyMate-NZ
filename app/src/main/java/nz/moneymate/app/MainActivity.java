@@ -515,8 +515,8 @@ public final class MainActivity extends Activity {
                     cloudStatus=value.message;
                     if(notify||cloudStatus.toLowerCase(java.util.Locale.ROOT).contains("conflict"))
                         Toast.makeText(this,cloudStatus,Toast.LENGTH_LONG).show();
-                    if(currentPage.equals("Account")){
-                        ignoreNextAutoSync=true;show("Account");
+                    if(value.snapshot!=null||currentPage.equals("Account")){
+                        ignoreNextAutoSync=true;show(currentPage);
                     }
                 }catch(Exception failure2){
                     cloudStatus="Cloud sync could not be completed; local records kept.";
