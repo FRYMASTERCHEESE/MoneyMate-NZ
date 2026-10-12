@@ -34,6 +34,9 @@ public final class MainActivity extends Activity {
     private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private String documentOwner;
     private long lastAccountCheck;
+    private long lastCloudAttempt;
+    private boolean cloudBusy=false,ignoreNextAutoSync=false;
+    private String cloudStatus="Cloud syncing is not enabled";
     @Override public void onCreate(Bundle state) {
         super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
@@ -59,7 +62,8 @@ public final class MainActivity extends Activity {
                 }});
             });
         }
-        // Automatically check the public theme on launch/return, no account or financial data upload.
+        if(auth.userId()!=null)requestCloudSync(false);
+        // Automatically check the public theme on launch/return.
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
@@ -152,6 +156,8 @@ public final class MainActivity extends Activity {
         }
         tabs.addView(links);frame.addView(tabs);tabs.post(()->tabs.scrollTo(Math.max(0,selectedTab[0].getLeft()-dp(16)),0));
         if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
+        if(ignoreNextAutoSync)ignoreNextAutoSync=false;
+        else if(auth.userId()!=null&&System.currentTimeMillis()-lastCloudAttempt>2500L)requestCloudSync(false);
     }
     private void title(String s) {content.addView(text(s,23,true));}
     private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
@@ -377,7 +383,7 @@ public final class MainActivity extends Activity {
     }
     private void exports() {
         title("Your data stays on this device");
-        line("Export or restore records for the current local profile only. Accounts do not sync financial records to the cloud.");
+        line("Export or restore records for the current profile. Signed-in users can enable cloud sync in Account. Please keep JSON backups; different edits made offline on two devices may need manual conflict resolution.");
         content.addView(button("Export CSV",()->{
             Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);i.addCategory(Intent.CATEGORY_OPENABLE);i.setType("text/csv");
             i.putExtra(Intent.EXTRA_TITLE,"MoneyMate-NZ-"+LocalDate.now()+".csv");startActivityForResult(i,100);
@@ -413,7 +419,7 @@ public final class MainActivity extends Activity {
     }
     private void account() {
         title("Your MoneyMate account");
-        line("Financial records stay on this device. Each signed-in account has a separate local profile. Accounts do not provide cloud backup or sync.");
+        line("Your records stay local unless you opt into secure Supabase cloud sync. When enabled, Android and the website can share records under the same verified account. Changes on two devices at once can cause a safe sync conflict.");
         content.addView(button("Privacy policy",()->new AlertDialog.Builder(this).setTitle("Privacy and accounts")
             .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage. Signing out hides your account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
             .setPositiveButton("Read full policy",(d,w)->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html"))))
@@ -429,6 +435,20 @@ public final class MainActivity extends Activity {
             content.addView(button("Reset password with email code",()->emailCodeForm(true)));
         } else {
             line("Signed in as "+auth.email());
+            CloudSync.Metadata cloud=CloudSync.metadata(this,auth.userId());
+            line(cloudStatus+" · "+(cloud.enabled?"Cloud sync enabled":"Cloud sync disabled"));
+            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->new AlertDialog.Builder(this)
+                .setTitle("Back up MoneyMate NZ to the cloud?")
+                .setMessage("Your private financial records will be uploaded to Supabase in Sydney, Australia and become available on your other devices using the same account. This is optional. Keep a full JSON backup first. Existing cloud data is never silently overwritten. Continue?")
+                .setNegativeButton("Cancel",null)
+                .setPositiveButton("Enable",(d,w)->{
+                    try {
+                        CloudSync.persist(this,auth.userId(),new CloudSync.Metadata(true,0,""));
+                        cloudStatus="Cloud sync opted in; checking for existing cloud records";
+                        requestCloudSync(true);
+                    }catch(Exception error){message("Cloud setup failed. Local data was not changed.");}
+                }).show()));
+            else content.addView(button("Sync records now",()->requestCloudSync(true)));
             content.addView(button("Sign out",()->new AlertDialog.Builder(this).setTitle("Sign out?")
                 .setMessage("Your account records remain on this device and are hidden until you sign in again. The separate local profile will open. If offline, this device still signs out; remote sessions may remain active.")
                 .setNegativeButton("Cancel",null).setPositiveButton("Sign out",(d,w)->accountTask(()->auth.signout(),()->{switchProfile();},true)).show()));
@@ -440,6 +460,48 @@ public final class MainActivity extends Activity {
                 }).show()));
             content.addView(button("Delete account permanently",()->deleteForm()));
         }
+    }
+    private void requestCloudSync(boolean notify) {
+        final String user=auth.userId();
+        if(user==null||cloudBusy||accountBusy)return;
+        final CloudSync.Metadata baseline=CloudSync.metadata(this,user);
+        if(!baseline.enabled)return;
+        final String before;
+        try {before=store.backupJson();}
+        catch(Exception failure){if(notify)message("Could not read local data for syncing");return;}
+        cloudBusy=true;lastCloudAttempt=System.currentTimeMillis();
+        accountWorker.execute(()->{
+            CloudSync.Result result=null;String problem=null;
+            try{result=CloudSync.synchronize(auth,baseline,before);}
+            catch(Exception error){problem="Cloud unavailable. Your saved local records are safe.";}
+            final CloudSync.Result value=result;final String failure=problem;
+            runOnUiThread(()->{
+                try {
+                    if(isFinishing()||isDestroyed()||!user.equals(auth.userId()))return;
+                    if(failure!=null){cloudStatus=failure;if(notify)message(failure);return;}
+                    String fresh=store.backupJson();
+                    if(value.snapshot!=null) {
+                        // Never replace changes made on this phone while the request was running.
+                        if(!CloudSync.digest(fresh).equals(CloudSync.digest(before))){
+                            cloudStatus="Local records changed while syncing; download postponed.";
+                            return;
+                        }
+                        CloudSync.recoveryCopy(this,user,fresh);
+                        store.restoreJson(value.snapshot);
+                        CloudSync.persist(this,user,new CloudSync.Metadata(true,value.state.revision,CloudSync.digest(store.backupJson())));
+                    }else if(value.state!=baseline)CloudSync.persist(this,user,value.state);
+                    cloudStatus=value.message;
+                    if(notify||cloudStatus.toLowerCase(java.util.Locale.ROOT).contains("conflict"))
+                        Toast.makeText(this,cloudStatus,Toast.LENGTH_LONG).show();
+                    if(currentPage.equals("Account")){
+                        ignoreNextAutoSync=true;show("Account");
+                    }
+                }catch(Exception failure2){
+                    cloudStatus="Cloud sync could not be completed; local records kept.";
+                    if(notify)message(cloudStatus);
+                }finally{cloudBusy=false;}
+            });
+        });
     }
     private LinearLayout form(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(dp(24),dp(8),dp(24),dp(8));return layout;}
     private EditText emailInput(LinearLayout layout){EditText field=input(layout,"Email",false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);return field;}
