@@ -1,5 +1,5 @@
-const CACHE="moneymate-nz-web-v8-csv-import";
-const STATIC=["./","./index.html","./web.css","./web-app.js","./web-core.mjs","./bank-csv.mjs","./auth-session.mjs","./sync-policy.mjs","./wallet.svg","./app-theme.json"];
+const CACHE="moneymate-nz-web-v9-pdf-statement";
+const STATIC=["./","./index.html","./web.css","./web-app.js","./web-core.mjs","./bank-csv.mjs","./pdf-statement.mjs","./auth-session.mjs","./sync-policy.mjs","./wallet.svg","./app-theme.json"];
 self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(STATIC)).then(()=>self.skipWaiting())));
 self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key.startsWith("moneymate-nz-web-")&&key!==CACHE).map(key=>caches.delete(key)))).then(()=>self.clients.claim())));
 self.addEventListener("fetch",event=>{
