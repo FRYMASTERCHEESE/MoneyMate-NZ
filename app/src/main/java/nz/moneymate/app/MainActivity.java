@@ -181,6 +181,15 @@ public final class MainActivity extends Activity {
                 content.addView(chart);
             }
         }
+        try(Cursor late=store.query("SELECT name,cents,due FROM bills WHERE due<? ORDER BY due LIMIT 5",LocalDate.now().toString())) {
+            if(late.moveToFirst()) {
+                title("Overdue bills");
+                do {
+                    String name=late.getString(0),amount=MoneyMath.format(late.getLong(1));
+                    content.addView(record("⚠  "+name+" · "+amount+" · due "+late.getString(2),()->show("Bills")));
+                } while(late.moveToNext());
+            }
+        }
         title("Upcoming bills");
         try(Cursor c=store.query("SELECT name,cents,due FROM bills WHERE due>=? ORDER BY due LIMIT 5",LocalDate.now().toString())) {
             if(c.getCount()==0)empty("A clear view of what’s next","Add bills and their due dates to plan ahead.");
@@ -228,13 +237,41 @@ public final class MainActivity extends Activity {
             }
         }
         title("Transaction history");
-        try(Cursor c=store.query("SELECT id,date,kind,category,note,cents FROM transactions ORDER BY date DESC,id DESC LIMIT 300")) {
-            if(c.getCount()==0)empty("Your story starts here","Record your first income or expense.");
-            while(c.moveToNext()){
+        EditText search=input(content,"Search date, category, type or note",false);
+        search.setSingleLine(true);
+        search.setContentDescription("Search transactions");
+        search.setInputType(InputType.TYPE_CLASS_TEXT);
+        LinearLayout history=new LinearLayout(this);
+        history.setOrientation(1);
+        content.addView(history);
+        renderTransactionHistory(history,"");
+        search.addTextChangedListener(new android.text.TextWatcher(){
+            @Override public void beforeTextChanged(CharSequence s,int start,int count,int after){}
+            @Override public void onTextChanged(CharSequence s,int start,int before,int count){
+                renderTransactionHistory(history,s.toString());
+            }
+            @Override public void afterTextChanged(android.text.Editable s){}
+        });
+    }
+    /** Parameterised search treats user input literally, including % and _ characters. */
+    private void renderTransactionHistory(LinearLayout history,String term) {
+        history.removeAllViews();
+        String needle=term.trim();
+        try(Cursor c=store.query("SELECT id,date,kind,category,note,cents FROM transactions "
+                +"WHERE (?='' OR instr(lower(category),lower(?))>0 OR instr(lower(note),lower(?))>0 "
+                +"OR instr(lower(kind),lower(?))>0 OR instr(date,?)>0) "
+                +"ORDER BY date DESC,id DESC LIMIT 300",needle,needle,needle,needle,needle)) {
+            if(c.getCount()==0) {
+                history.addView(text(needle.isEmpty()?"No transactions yet. Add income or an expense.":"No matching transactions.",16,false));
+            }
+            while(c.moveToNext()) {
                 long id=c.getLong(0);
-                String s=c.getString(1)+"  "+c.getString(2)+" · "+c.getString(3)+"\n"+c.getString(4)+"   "+MoneyMath.format(c.getLong(5));
-                content.addView(record(s,()->new AlertDialog.Builder(this).setTitle("Delete transaction?")
-                  .setMessage(s).setNegativeButton("Cancel",null).setPositiveButton("Delete",(d,w)->{store.deleteTransaction(id);show("Transactions");}).show()));
+                String summary=c.getString(1)+"  "+c.getString(2)+" · "+c.getString(3)
+                    +"\n"+c.getString(4)+"   "+MoneyMath.format(c.getLong(5));
+                history.addView(record(summary,()->new AlertDialog.Builder(this)
+                  .setTitle("Delete transaction?").setMessage(summary)
+                  .setNegativeButton("Cancel",null)
+                  .setPositiveButton("Delete",(d,w)->{store.deleteTransaction(id);show("Transactions");}).show()));
             }
         }
     }
@@ -306,9 +343,36 @@ public final class MainActivity extends Activity {
             if(v[0].isEmpty()||amount<=0)throw new IllegalArgumentException("Enter bill and positive amount");
             store.addBill(v[0],amount,date);show("Bills");
         })));
-        try(Cursor c=store.query("SELECT name,cents,due FROM bills ORDER BY due")) {
+        line("MoneyMate tracks bills only. Recording one as paid adds an expense, but does not make a bank payment.");
+        try(Cursor c=store.query("SELECT id,name,cents,due FROM bills ORDER BY due")) {
             if(c.getCount()==0)empty("Stay ahead of due dates","Add your first bill to keep it in view.");
-            while(c.moveToNext())line(c.getString(2)+"  ·  "+c.getString(0)+"  ·  "+MoneyMath.format(c.getLong(1)));
+            while(c.moveToNext()) {
+                long id=c.getLong(0),cents=c.getLong(2);
+                String name=c.getString(1),date=c.getString(3);
+                long days=java.time.temporal.ChronoUnit.DAYS.between(LocalDate.now(),LocalDate.parse(date));
+                String timing=days<0?"OVERDUE by "+(-days)+" days"
+                    :days==0?"DUE TODAY":days<=7?"Due in "+days+" days":"Due "+date;
+                LinearLayout item=card();
+                item.addView(text(name+"  ·  "+MoneyMath.format(cents),19,true));
+                TextView due=text(timing,15,true);due.setTextColor(days<0?0xffae4237:days<=7?0xffa06b15:green);
+                item.addView(due);
+                item.addView(button("Record as paid",()->new AlertDialog.Builder(this)
+                  .setTitle("Record bill as paid?")
+                  .setMessage("Add a "+MoneyMath.format(cents)+" Bills expense for "+name
+                      +" and remove this bill from your list? This does NOT transfer money.")
+                  .setNegativeButton("Cancel",null)
+                  .setPositiveButton("Record payment",(d,w)->{
+                      try {
+                          if(store.recordBillPaid(id,LocalDate.now().toString()))show("Bills");
+                          else message("This bill was already removed.");
+                      }catch(Exception error){message("Could not record this payment.");}
+                  }).show()));
+                item.addView(record("Remove bill without recording payment",()->new AlertDialog.Builder(this)
+                  .setTitle("Remove this bill?").setMessage(name+" will be removed. No expense will be recorded.")
+                  .setNegativeButton("Cancel",null)
+                  .setPositiveButton("Remove",(d,w)->{store.deleteBill(id);show("Bills");}).show()));
+                content.addView(item);
+            }
         }
     }
     private void exports() {
