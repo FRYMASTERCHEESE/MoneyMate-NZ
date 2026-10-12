@@ -4,11 +4,13 @@ on:
     paths:
       - 'docs/**'
       - 'tests/**'
+      - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'docs/**'
-      - 'tests/web-core.test.mjs'
+      - 'tests/**'
+      - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   workflow_dispatch:
 jobs:

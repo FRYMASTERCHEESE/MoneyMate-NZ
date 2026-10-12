@@ -1,5 +1,6 @@
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
+import {decideSync} from "./sync-policy.mjs";
 
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -13,13 +14,14 @@ let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
 let refreshInFlight=null;
+let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
 function dbOpen(){
  return new Promise((resolve,reject)=>{
-  const req=indexedDB.open("MoneyMateNZWeb",1);
-  req.onupgradeneeded=()=>req.result.createObjectStore("profiles");
+  const req=indexedDB.open("MoneyMateNZWeb",2);
+  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains("profiles"))req.result.createObjectStore("profiles");if(!req.result.objectStoreNames.contains("sync"))req.result.createObjectStore("sync");};
   req.onerror=()=>reject(req.error);
   req.onsuccess=()=>resolve(req.result);
  });
@@ -38,10 +40,11 @@ async function dbErase(id){
  const db=await dbOpen();try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
 async function save(next){
- data=strictData(next);await dbWrite(profile,data);render();
+ const owner=profile;data=strictData(next);await dbWrite(owner,data);render();
+ if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
 }
 async function switchOwner(id){
- profile=id||"guest";
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
  data=await dbRead(profile);
  const result=recordDue(data,today());
  if(result.created)await dbWrite(profile,result.data);
@@ -131,7 +134,7 @@ function bills(){
 }
 function exportPage(){
  return heading("Export & backup","Take control of your records and move them between your devices.")
- +'<div class="notice warning"><strong>Important:</strong> Your Android app and this laptop store financial data separately. Signing into the same account does not automatically sync transactions. Use a JSON backup to move records between devices. Store backups securely.</div>'
+ +'<div class="notice warning"><strong>Important:</strong> Signed-in users can enable secure syncing in Account to share transactions, budgets, goals and bills between Android and web. Guest records stay local. Keep a full JSON backup.</div>'
  +'<div class="grid-2"><section class="panel"><h2>Export your data</h2><p class="muted">Download a spreadsheet-compatible CSV or a complete MoneyMate NZ JSON backup of the current local profile.</p>'
  +'<div class="btns">'+btn("Export transactions CSV","csv")+btn("Save full JSON backup","backup","secondary")+'</div></section>'
  +'<section class="panel"><h2>Restore a full backup</h2><p class="muted">Import a JSON backup saved on this laptop or exported from Android. It replaces all entries in this local profile, after confirmation.</p>'
@@ -141,11 +144,11 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Signing into the same email account on Android and web does <strong>not</strong> automatically sync finances. Each device retains its own private local records; use Export & backup for transfers.</div>';
+ html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on both devices, changes sync automatically when online. Conflicting edits on two offline devices require a manual choice; keep a JSON backup.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
-   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial entries are local to this browser and isolated under your Supabase user ID.</p>'
-    +'<div class="btns">'+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
+   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
+    +'<div class="notice">'+escape(cloudStatus)+'</div><div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))+(cloudStatus.toLowerCase().includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")+(localEmpty(data)?btn("Copy guest records","import-guest","secondary"):"")+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
     +formField("email","Email address","email","email",true,'autocomplete="username"')
@@ -363,6 +366,10 @@ async function settingsAction(action){
   case "go-admin":if(adminOverview)navigate("admin");break;
   case "admin-refresh":await refreshAdminOverview(false);break;
   case "google-login":await signInWithGoogle();break;
+  case "cloud-enable":await enableCloud();break;
+  case "cloud-sync":await syncCloud(true);break;
+  case "cloud-download":await chooseCloudCopy();break;
+  case "import-guest":await copyGuest();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -408,6 +415,7 @@ async function attachSession(result,{persist=true,checkAdmin=true}={}){
  if(persist)await saveLoginSession(next);
  auth=next;adminOverview=null;
  await switchOwner(next.user.id);
+ await cloudOnSignin();
  if(checkAdmin)await refreshAdminOverview(true);
  toast("Signed in. Your private account records are available.");
 }
@@ -528,7 +536,7 @@ async function deleteAccount(){
   const id=auth.user.id;
   await authApi("/functions/v1/delete-account","POST",{password},await accessToken());
   await clearLoginSession().catch(()=>{});
-   await dbErase(id);adminOverview=null;auth=null;
+   await dbErase(id);await dbSyncMeta(id,null);adminOverview=null;auth=null;cloudMeta=null;
   await switchOwner("guest");navigate("account");
   toast("Account deleted. Browser records for this account have also been removed.");
  });
@@ -620,6 +628,164 @@ async function finishGoogleSignin(){
  }catch(error){errorMessage(error);}
 }
 
+
+
+async function dbSyncMeta(id,write) {
+ const db=await dbOpen();
+ try {
+  return await new Promise((resolve,reject)=>{
+   const tx=db.transaction("sync",write===undefined?"readonly":"readwrite"),store=tx.objectStore("sync");
+   const req=write===undefined?store.get(id):write===null?store.delete(id):store.put(write,id);
+   req.onsuccess=()=>resolve(write===undefined?req.result:write);
+   req.onerror=()=>reject(req.error);
+  });
+ }finally{db.close();}
+}
+const localEmpty=backup=>["transactions","budgets","goals","bills","recurring"].every(t=>backup[t].length===0);
+async function signature(backup){
+ const bytes=new TextEncoder().encode(JSON.stringify(strictData(backup)));
+ const digest=new Uint8Array(await crypto.subtle.digest("SHA-256",bytes));
+ return Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
+}
+async function cloudRead() {
+ const result=await authApi("/rest/v1/rpc/read_account_snapshot","POST",{},await accessToken());
+ if(!Number.isSafeInteger(result.revision)||result.revision<0)throw Error("Cloud replied with an invalid revision.");
+ if(result.revision>0)strictData(result.data);
+ return result;
+}
+async function cloudCommit(revision,backup) {
+ const result=await authApi("/rest/v1/rpc/commit_account_snapshot","POST",{
+  p_expected_revision:revision,p_data:strictData(backup)
+ },await accessToken());
+ if(typeof result.success!=="boolean"||!Number.isSafeInteger(result.revision))throw Error("Cloud save returned an invalid reply.");
+ return result;
+}
+async function cloudOnSignin() {
+ const owner=auth?.user?.id;
+ if(!owner)return;
+ cloudMeta=await dbSyncMeta(owner)||null;
+ if(cloudMeta?.enabled){await syncCloud(false);return;}
+ try {
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner||profile!==owner)return;
+  cloudStatus=remote.revision>0?
+    "Cloud copy available. Export a JSON backup, then tap Enable secure cloud sync to use it on this device.":
+    "Cloud sync is off. Enable it to share your finances across devices.";
+ }catch{
+  cloudStatus="Cloud status unavailable. Your local financial records remain safe.";
+ }
+ render();
+}
+async function enableCloud() {
+ if(!auth)return;
+ if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ if(cloudBusy)return;
+ cloudBusy=true;
+ try{
+  const owner=auth.user.id,remote=await cloudRead();
+  if(auth?.user?.id!==owner||profile!==owner)return;
+  const localHash=await signature(data);
+  if(remote.revision>0){
+   const remoteData=strictData(remote.data);
+   if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
+    await dbWrite(owner,remoteData);data=remoteData;
+    cloudMeta={enabled:true,revision:remote.revision,digest:await signature(data)};
+    cloudStatus="Cloud records restored. Automatic sync is active.";
+   }else{
+    cloudStatus="Sync conflict: this browser and cloud both have different records. Export local JSON first; nothing was overwritten.";
+    toast(cloudStatus);render();return;
+   }
+  }else{
+   const result=await cloudCommit(0,data);
+   if(!result.success){cloudStatus="Another device created a cloud copy. Nothing was overwritten.";render();return;}
+   cloudMeta={enabled:true,revision:result.revision,digest:localHash};
+   cloudStatus="Cloud sync enabled. Your records are now backed up online.";
+  }
+  await dbSyncMeta(owner,cloudMeta);render();toast(cloudStatus);
+ }catch(error){cloudStatus="Could not enable cloud sync. Your existing local records remain safe.";errorMessage(error);render();}
+ finally{cloudBusy=false;}
+}
+async function syncCloud(showStatus=false) {
+ if(!auth||!cloudMeta?.enabled)return;
+ if(cloudBusy){cloudPending=true;return;}
+ cloudBusy=true;
+ const owner=auth.user.id;
+ try{
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner||profile!==owner)return;
+  const localHash=await signature(data);
+  const choice=decideSync({
+   enabled:cloudMeta.enabled,baseRevision:cloudMeta.revision,baseDigest:cloudMeta.digest,
+   localDigest:localHash,remoteRevision:remote.revision,localEmpty:localEmpty(data)
+  });
+  if(choice==="conflict"){
+   cloudStatus="Sync conflict: both devices changed records. Your local changes are safe; cloud was not overwritten. Export JSON before resolving.";
+  }else if(choice==="download"){
+   if(!remote.data){cloudStatus="Cloud copy not found. Local records are unchanged.";return;}
+   const restored=strictData(remote.data),hash=await signature(restored);
+   // Never overwrite local edits made while the request was in flight.
+   if(auth?.user?.id!==owner||await signature(data)!==localHash){cloudPending=true;return;}
+   await dbWrite(owner,restored);data=restored;
+   cloudMeta={enabled:true,revision:remote.revision,digest:hash};
+   await dbSyncMeta(owner,cloudMeta);
+   cloudStatus="Cloud changes recovered and saved to this device.";render();
+  }else if(choice==="upload"){
+   const captured=strictData(data),hash=await signature(captured);
+   const result=await cloudCommit(cloudMeta.revision,captured);
+   if(result.success){
+    cloudMeta={enabled:true,revision:result.revision,digest:hash};
+    await dbSyncMeta(owner,cloudMeta);
+    cloudStatus="Synced securely to your account.";
+    if(await signature(data)!==hash)cloudPending=true;
+   }else cloudStatus="Sync conflict: the cloud changed before this upload. Your local records were kept.";
+  }else cloudStatus="Up to date · securely saved to cloud.";
+  if(showStatus)toast(cloudStatus);
+  if(page==="account")render();
+ }catch(error){
+  cloudStatus="Offline or sync unavailable. Local records are safe; retry when connected.";
+  if(showStatus)errorMessage(error);
+  if(page==="account")render();
+ }finally{
+  cloudBusy=false;
+  if(cloudPending){cloudPending=false;setTimeout(()=>{if(auth?.user?.id===owner)void syncCloud(false);},0);}
+ }
+}
+async function chooseCloudCopy() {
+ if(!auth)return;
+ const owner=auth.user.id;
+ if(!window.confirm("First export a full JSON backup of your current local records. Continue only if you have saved it. This replaces the current browser profile with the cloud copy."))return;
+ if(!window.confirm("Final confirmation: REPLACE this device's local financial records with the saved cloud version?"))return;
+ try{
+  const remote=await cloudRead();
+  if(auth?.user?.id!==owner||!remote.data)throw Error("Cloud records unavailable.");
+  const safe=strictData(remote.data);
+  // Preserve the outgoing local records in a separate browser store for recovery.
+  await dbWrite(owner+"-before-cloud-"+Date.now(),data);
+  await dbWrite(owner,safe);data=safe;
+  cloudMeta={enabled:true,revision:remote.revision,digest:await signature(safe)};
+  await dbSyncMeta(owner,cloudMeta);
+  cloudStatus="Cloud copy restored. Previous local records remain in a safety copy in this browser.";
+  render();toast("Cloud copy restored.");
+ }catch(error){errorMessage(error);}
+}
+document.addEventListener("visibilitychange",()=>{
+ if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
+});
+
+
+
+
+window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
+setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
+async function copyGuest(){
+ if(!auth)return;
+ if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");
+ const original=await dbRead("guest");
+ if(localEmpty(original)){toast("No guest records to copy.");return;}
+ if(!confirm("Copy guest income, expenses, budgets, goals, bills and repeating entries into this empty account? The guest records are preserved, and cloud sync will only upload after your consent."))return;
+ await save(original);
+ toast("Guest records copied safely. The original guest profile was not changed.");
+}
 
 
 async function bootstrap(){
