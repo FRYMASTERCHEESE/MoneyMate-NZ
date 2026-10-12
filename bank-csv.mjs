@@ -139,8 +139,8 @@ export function planBankCsv(text,existing=[],accountLabel="My bank account"){
       if(rawType&&/^(expense|debit|withdrawal|out|payment)$/.test(rawType))kind="Expense";
       else if(rawType&&/^(income|credit|deposit|in)$/.test(rawType))kind="Income";
       else kind=amount<0?"Expense":"Income";
-      if(rawType&&kind===(amount<0?"Income":"Expense")&&/^(expense|debit|withdrawal|out|payment|income|credit|deposit|in)$/.test(rawType))
-        throw Error("Row "+(i+1)+" amount direction disagrees with Type.");
+      // MoneyMate exports expense rows with an unsigned positive Amount NZD column.
+      if(amount<0&&kind==="Income")throw Error("Row "+(i+1)+" income has a negative amount.");
     }else{
       const debit=money(field("debit")),credit=money(field("credit"));
       if((debit!==null&&debit!==0)===(credit!==null&&credit!==0))throw Error("Row "+(i+1)+" needs exactly one Debit or Credit.");
