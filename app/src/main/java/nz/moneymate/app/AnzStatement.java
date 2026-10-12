@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
 public final class AnzStatement {
     private AnzStatement(){}
     private static final String MONEY="[-+]?(?:NZD\\s*|\\$)?(?:0|[1-9][0-9,]*)(?:\\.[0-9]{2})";
-    private static final Pattern HEADER=Pattern.compile("\\bdate\\b.*\\b(transaction|details)\\b.*\\bwithdrawals?\\b.*\\bdeposits?\\b.*\\bbalance\\b",Pattern.CASE_INSENSITIVE);
+    private static final Pattern HEADER=Pattern.compile("\\bdate\\b.*\\b(transaction|details)\\b.*(?=.*\\bwithdrawals?\\b)(?=.*\\bdeposits?\\b).*\\bbalance\\b",Pattern.CASE_INSENSITIVE);
     private static final Pattern PERIOD=Pattern.compile("(\\d{1,2})\\s+([A-Za-z]{3})\\s+(\\d{4})\\s*(?:-|–|—|to)\\s*(\\d{1,2})\\s+([A-Za-z]{3})\\s+(\\d{4})",Pattern.CASE_INSENSITIVE);
     private static final Pattern DATE=Pattern.compile("^(\\d{1,2})\\s+([A-Za-z]{3})\\s+(?:(\\d{4})\\s+)?");
     private static final Pattern PAIR=Pattern.compile("\\s("+MONEY+")\\s+("+MONEY+")\\s*$",Pattern.CASE_INSENSITIVE);
@@ -69,7 +69,7 @@ public final class AnzStatement {
                 Matcher m=LAST_MONEY.matcher(line);
                 if(!m.find())throw new IllegalArgumentException("Missing opening or carried balance");
                 long balance=cents(m.group(1));
-                if(opened&&!line.toLowerCase(Locale.ROOT).contains("brought forward"))
+                if(opened&&!line.toLowerCase(Locale.ROOT).contains("brought forward")&&!line.toLowerCase(Locale.ROOT).contains("carried forward"))
                     throw new IllegalArgumentException("Multiple accounts or statements: import one account at a time");
                 if(previous!=null&&previous.longValue()!=balance)
                     throw new IllegalArgumentException("Balance brought forward did not reconcile");
