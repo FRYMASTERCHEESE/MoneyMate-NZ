@@ -185,8 +185,8 @@ public final class MainActivity extends Activity {
             if(late.moveToFirst()) {
                 title("Overdue bills");
                 do {
-                    String name=late.getString(0),amount=MoneyMath.format(late.getLong(1));
-                    content.addView(record("⚠  "+name+" · "+amount+" · due "+late.getString(2),()->show("Bills")));
+                    String name=late.getString(0),amountLabel=MoneyMath.format(late.getLong(1));
+                    content.addView(record("⚠  "+name+" · "+amountLabel+" · due "+late.getString(2),()->show("Bills")));
                 } while(late.moveToNext());
             }
         }
