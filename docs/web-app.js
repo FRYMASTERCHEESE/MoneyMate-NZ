@@ -1,5 +1,6 @@
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
+import {decideSync} from "./sync-policy.mjs";
 
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -13,13 +14,14 @@ let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
 let refreshInFlight=null;
+let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
 function dbOpen(){
  return new Promise((resolve,reject)=>{
-  const req=indexedDB.open("MoneyMateNZWeb",1);
-  req.onupgradeneeded=()=>req.result.createObjectStore("profiles");
+  const req=indexedDB.open("MoneyMateNZWeb",2);
+  req.onupgradeneeded=()=>{if(!req.result.objectStoreNames.contains("profiles"))req.result.createObjectStore("profiles");if(!req.result.objectStoreNames.contains("sync"))req.result.createObjectStore("sync");};
   req.onerror=()=>reject(req.error);
   req.onsuccess=()=>resolve(req.result);
  });
@@ -38,10 +40,11 @@ async function dbErase(id){
  const db=await dbOpen();try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
 async function save(next){
- data=strictData(next);await dbWrite(profile,data);render();
+ const owner=profile;data=strictData(next);await dbWrite(owner,data);render();
+ if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
 }
 async function switchOwner(id){
- profile=id||"guest";
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
  data=await dbRead(profile);
  const result=recordDue(data,today());
  if(result.created)await dbWrite(profile,result.data);
@@ -131,7 +134,7 @@ function bills(){
 }
 function exportPage(){
  return heading("Export & backup","Take control of your records and move them between your devices.")
- +'<div class="notice warning"><strong>Important:</strong> Your Android app and this laptop store financial data separately. Signing into the same account does not automatically sync transactions. Use a JSON backup to move records between devices. Store backups securely.</div>'
+ +'<div class="notice warning"><strong>Important:</strong> Signed-in users can enable secure syncing in Account to share transactions, budgets, goals and bills between Android and web. Guest records stay local. Keep a full JSON backup.</div>'
  +'<div class="grid-2"><section class="panel"><h2>Export your data</h2><p class="muted">Download a spreadsheet-compatible CSV or a complete MoneyMate NZ JSON backup of the current local profile.</p>'
  +'<div class="btns">'+btn("Export transactions CSV","csv")+btn("Save full JSON backup","backup","secondary")+'</div></section>'
  +'<section class="panel"><h2>Restore a full backup</h2><p class="muted">Import a JSON backup saved on this laptop or exported from Android. It replaces all entries in this local profile, after confirmation.</p>'
@@ -141,11 +144,11 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Signing into the same email account on Android and web does <strong>not</strong> automatically sync finances. Each device retains its own private local records; use Export & backup for transfers.</div>';
+ html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on both devices, changes sync automatically when online. Conflicting edits on two offline devices require a manual choice; keep a JSON backup.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
-   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial entries are local to this browser and isolated under your Supabase user ID.</p>'
-    +'<div class="btns">'+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
+   html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
+    +'<div class="notice">'+escape(cloudStatus)+'</div><div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))+(cloudStatus.toLowerCase().includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")+(localEmpty(data)?btn("Copy guest records","import-guest","secondary"):"")+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
     +formField("email","Email address","email","email",true,'autocomplete="username"')
@@ -363,6 +366,10 @@ async function settingsAction(action){
   case "go-admin":if(adminOverview)navigate("admin");break;
   case "admin-refresh":await refreshAdminOverview(false);break;
   case "google-login":await signInWithGoogle();break;
+  case "cloud-enable":await enableCloud();break;
+  case "cloud-sync":await syncCloud(true);break;
+  case "cloud-download":await chooseCloudCopy();break;
+  case "import-guest":await copyGuest();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -408,6 +415,7 @@ async function attachSession(result,{persist=true,checkAdmin=true}={}){
  if(persist)await saveLoginSession(next);
  auth=next;adminOverview=null;
  await switchOwner(next.user.id);
+ await cloudOnSignin();
  if(checkAdmin)await refreshAdminOverview(true);
  toast("Signed in. Your private account records are available.");
 }
@@ -528,7 +536,7 @@ async function deleteAccount(){
   const id=auth.user.id;
   await authApi("/functions/v1/delete-account","POST",{password},await accessToken());
   await clearLoginSession().catch(()=>{});
-   await dbErase(id);adminOverview=null;auth=null;
+   await dbErase(id);await dbSyncMeta(id,null);adminOverview=null;auth=null;cloudMeta=null;
   await switchOwner("guest");navigate("account");
   toast("Account deleted. Browser records for this account have also been removed.");
  });
