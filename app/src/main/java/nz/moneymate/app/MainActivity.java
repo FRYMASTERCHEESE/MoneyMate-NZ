@@ -161,12 +161,12 @@ public final class MainActivity extends Activity {
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Rewards": rewards();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Rewards": rewards();break;case "Help": help();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(0);
         final View[] selectedTab=new View[1];
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Rewards"}) {
+        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Rewards","Help"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
             nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
@@ -524,6 +524,32 @@ public final class MainActivity extends Activity {
         content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
         content.addView(button("About Basiq (Australia)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.basiq.io/")))));
         line("Never enter banking passwords in MoneyMate NZ. Future consent will be read-only and revocable. AUD amounts must stay separate from NZD until currency conversion is supported.");
+    }
+    /** Simple in-app guide. Accessible without an account or network. */
+    private void help(){
+        title("How to use MoneyMate NZ");
+        line("MoneyMate NZ helps you track income, expenses, budgets, savings goals and bills. It does not move money or pay bills. Use the navigation tabs at the bottom to open each section.");
+        title("1. Sign in or use a local profile");
+        line("Open Account to sign in using Google (when available) or email, or continue without signing in. To share your points or enable private cloud sync across devices, use the same account on Android and the website.");
+        title("2. Add income or expenses");
+        line("Home or Transactions → + Income / + Expense. Choose a category, enter the amount in NZD, and save the entry. Home displays monthly income, spending and balance.");
+        title("3. Import bank CSV for free");
+        line("Download a CSV statement in NZD from your bank's official website or app. Choose Banking → Import NZD bank statement CSV, or Transactions / Export → Import bank CSV. Enter a consistent nickname for the account (not its account number), review the preview and tap Add transactions. This never asks for bank passwords and does not download new transactions automatically.");
+        line("Only NZD files are supported. AUD files are blocked. Recognised duplicates are skipped but truly identical transactions can be hard to distinguish. Save a JSON backup before large imports.");
+        title("4. Plan with budgets and goals");
+        line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
+        title("5. Earn your free daily points");
+        line("Sign in and open Rewards. Tap Claim 10 points once per UTC day. Points share with your account, but they have no cash value and cannot be redeemed, transferred or withdrawn.");
+        title("6. Sync Android with the website");
+        line("First save a JSON backup separately on BOTH devices in Export. Then use the same signed-in account on each. On the first device tap Account → Enable secure cloud sync; wait for confirmation. On the second device also enable sync. Sync happens while online and when edits are saved. If there is a conflict, export both copies first and do not replace data blindly.");
+        title("7. Back up and restore safely");
+        line("Export → Backup all data (JSON) preserves your current profile. Export CSV saves transaction rows for spreadsheets. Restore full backup (JSON) REPLACES existing profile records; bank CSV import only ADDS new transactions.");
+        title("8. Help and privacy");
+        line("Automatic live bank connections are not yet available. For login or syncing problems, retry online and check the same account on both devices. Never share a bank password, account token, or financial export publicly.");
+        content.addView(button("Open full help guide on website",()->startActivity(new Intent(
+            Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/help.html")))));
+        content.addView(button("Read privacy policy",()->startActivity(new Intent(
+            Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html")))));
     }
     private void rewards(){
         title("MoneyMate Points");
