@@ -482,7 +482,7 @@ function showResetModal(email){
  $("#editor-title").textContent="Reset password";
  $("#editor-fields").innerHTML=formField("modal-email","Email","email","email",true)
    +formField("modal-code","Reset code","text","code",true,'inputmode="numeric" pattern="[0-9]{6,10}"')
-   +formField("modal-new-password","New password (12–128 chars)","password","password",true,'minlength="8" maxlength="128"');
+   +formField("modal-new-password","New password (8–128 chars)","password","password",true,'minlength="8" maxlength="128"');
  $("#editor-hint").textContent="Enter the code sent to your email. No data is deleted.";
  $("#editor-fields").querySelector("#modal-email").value=email;
  $("#submit-modal").textContent="Reset password";

@@ -14,7 +14,7 @@ Set monthly spending budgets to help you stay on track. Create savings goals, ad
 
 Use weekly, fortnightly or monthly repeating transactions to automatically add records when you open the app. Export transactions to CSV, or save and restore your complete data with a JSON backup.
 
-MoneyMate NZ works without an account or a paid subscription. Your transaction details are stored on your device, not on our servers. You can choose where to save your own export and backup files.
+MoneyMate NZ works without an account or a paid subscription. By default your financial records stay on your device. If you choose to enable cloud sync, a copy of your records is stored securely in our Supabase project in Sydney, Australia for access from your signed-in devices. Cloud sync requires testing before public release. You can also save your own export and backup files.
 
 The free app is supported by advertising provided through Google AdMob, subject to privacy/consent choices.
 

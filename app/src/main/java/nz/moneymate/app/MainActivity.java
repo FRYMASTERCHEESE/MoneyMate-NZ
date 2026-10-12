@@ -451,7 +451,7 @@ public final class MainActivity extends Activity {
         title("Your MoneyMate account");
         line("Your records stay local unless you opt into secure Supabase cloud sync. When enabled, Android and the website can share records under the same verified account. Changes on two devices at once can cause a safe sync conflict.");
         content.addView(button("Privacy policy",()->new AlertDialog.Builder(this).setTitle("Privacy and accounts")
-            .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage. Signing out hides your account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
+            .setMessage("Email and authentication details are processed by Supabase. Passwords are not stored in this app. Session tokens are encrypted with Android Keystore. Financial records stay in app-private storage unless you explicitly enable Supabase cloud sync. Cloud sync stores a separate copy in Sydney, Australia. Signing out hides your local account records; it does not erase them. Backups you export remain under your control. Google advertising and public design downloads also use network services. Read the full policy for retention and deletion details.")
             .setPositiveButton("Read full policy",(d,w)->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html"))))
             .setNegativeButton("Close",null).show()));
         if(auth.userId()==null) {

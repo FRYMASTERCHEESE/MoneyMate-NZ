@@ -13,6 +13,6 @@
 
 New apps submitted after 31 August 2026 must target API 36 or higher. This code targets 36.
 
-**Account release gate:** Complete `ACCOUNTS_SETUP.md`, including dedicated project, custom SMTP, public client configuration, deployed deletion function, live email/deletion tests, private support email and final privacy retention details. Publish and test both the in-app deletion flow and `delete-account.html`, then provide the web deletion URL in Play Console. Financial records remain local, separated by account; no financial cloud sync is provided.
+**Account release gate:** Complete `ACCOUNTS_SETUP.md`, including dedicated project, custom SMTP, public client configuration, deployed deletion function, live email/deletion tests, private support email and final privacy retention details. Publish and test both the in-app deletion flow and `delete-account.html`, then provide the web deletion URL in Play Console. Cloud sync is implemented in the draft account-sync release and requires explicit opt-in. Do not describe it as production-ready until real email/Google login and two-device recovery/conflict tests pass.
 
 **Current limitations:** Notifications are not implemented. The release AAB is unsigned and not immediately uploadable; production ads and final policy details still need configuration. Store captures from 0.2.x predate the Account tab; recapture before publication.
