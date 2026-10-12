@@ -31,7 +31,7 @@ public class CloudSyncTest {
         String fromAndroid=changed();
         CloudSync.Result uploaded=CloudSync.evaluate(new CloudSync.Metadata(true,0,""),0,null,fromAndroid,(revision,body)->{
             assertEquals(0L,revision.longValue());
-            assertEquals("Food",body.getJSONArray("transactions").optJSONObject(0).optString("category"));
+            assertEquals("Food",body.optJSONArray("transactions").optJSONObject(0).optString("category"));
             return new JSONObject(java.util.Map.of("success",true,"revision",1));
         });
         assertEquals(1,uploaded.state.revision);
