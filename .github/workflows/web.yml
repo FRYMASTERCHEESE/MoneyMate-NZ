@@ -1,0 +1,33 @@
+name: MoneyMate NZ web tests
+on:
+  push:
+    paths:
+      - 'docs/**'
+      - 'tests/web-core.test.mjs'
+      - '.github/workflows/web.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'tests/web-core.test.mjs'
+      - '.github/workflows/web.yml'
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --check docs/web-app.js
+      - run: node --check docs/web-core.mjs
+      - run: node --test tests/web-core.test.mjs
+      - name: Check publishable website files
+        run: |
+          test -s docs/index.html
+          test -s docs/web.css
+          test -s docs/web-app.js
+          test -s docs/account-config.json
+          test -s docs/privacy.html
