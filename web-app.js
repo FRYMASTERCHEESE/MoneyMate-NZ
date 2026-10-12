@@ -6,10 +6,11 @@ const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+
 const clockMonth=()=>today().slice(0,7);
 const prettyDate=s=>new Date(s+"T12:00:00").toLocaleDateString("en-NZ",{day:"numeric",month:"short",year:"numeric"});
 const amounts=["#06785b","#e4ac54","#5a9ed8","#ac89e5","#eb8769","#73c7be","#8aa56c"];
-const pages=["home","transactions","budgets","goals","bills","export","account"];
-const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals:"Savings goals",bills:"Bills",export:"Export & backup",account:"Account"}[p]||"Home");
+const pages=["home","transactions","budgets","goals","bills","export","account","admin"];
+const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals:"Savings goals",bills:"Bills",export:"Export & backup",account:"Account",admin:"Admin dashboard"}[p]||"Home");
 let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth=null,config=null,busy=false,searchTerm="";
 let toastTimer,modalKind="",modalTarget=0;
+let adminOverview=null;
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
@@ -142,7 +143,7 @@ function accountPage(){
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
    html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial entries are local to this browser and isolated under your Supabase user ID.</p>'
-    +'<div class="btns">'+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
+    +'<div class="btns">'+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
     +formField("email","Email address","email","email",true,'autocomplete="username"')
@@ -161,14 +162,43 @@ function accountPage(){
   +'<div class="btns">'+btn("Open Export & backup","go-export","secondary")+'</div></section>';
  return html;
 }
+
+function adminPage(){
+ if(!auth||!adminOverview)return heading("Administrator access","Sign in with your approved administrator account to view this section.")
+    +'<div class="notice warning">This dashboard requires a verified server-side admin role.</div>';
+ const fmt=value=>Number.isSafeInteger(value)&&value>=0?value.toLocaleString("en-NZ"):"—";
+ const cards=[
+  ["Registered accounts",adminOverview.registered_users,"Total MoneyMate identities"],
+  ["Confirmed accounts",adminOverview.verified_users,"Verified email identities"],
+  ["Google accounts",adminOverview.google_users,"Accounts with Google as a provider"],
+  ["Last 7 days",adminOverview.registrations_last_7_days,"New registrations"],
+  ["Cloud-backed profiles",adminOverview.cloud_sync_accounts,"Accounts with a saved cloud snapshot"]
+ ];
+ const last=adminOverview.latest_registration_at?new Date(adminOverview.latest_registration_at):null;
+ const lastText=last&&Number.isFinite(last.getTime())?last.toLocaleString("en-NZ"):"No registrations yet";
+ return heading("Admin dashboard","MoneyMate NZ operational overview · authorised access only")
+ +'<div class="notice"><strong>Administrator</strong> · '+escape(auth.user.email)+'<p style="margin:8px 0 0">Read-only account totals. No passwords, individual transaction histories, or customers’ financial values are exposed.</p></div>'
+ +'<div class="admin-stats">'+cards.map(([name,value,desc])=>'<section class="panel admin-stat"><span class="admin-stat-title">'+escape(name)+'</span><strong>'+escape(fmt(value))+'</strong><p class="muted">'+escape(desc)+'</p></section>').join("")+'</div>'
+ +'<div class="grid-2" style="margin-top:22px"><section class="panel"><h2>Account activity</h2><p class="muted">Latest registration</p><p><strong>'+escape(lastText)+'</strong></p><p class="muted">Metrics update when you refresh the panel.</p>'
+ +'<div class="btns">'+btn("↻ Refresh statistics","admin-refresh","secondary")+'</div></section>'
+ +'<section class="panel"><h2>Management links</h2><p class="muted">Changes to members and authentication happen in secured service consoles, not from this public website.</p>'
+ +'<div class="admin-links"><a href="https://supabase.com/dashboard/project/efdegdlsrkxlnjgbxtep/auth/users" target="_blank" rel="noopener noreferrer">View accounts ↗</a>'
+ +'<a href="https://supabase.com/dashboard/project/efdegdlsrkxlnjgbxtep" target="_blank" rel="noopener noreferrer">Database & authentication ↗</a>'
+ +'<a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions" target="_blank" rel="noopener noreferrer">Website and Android builds ↗</a>'
+ +'<a href="https://play.google.com/console/" target="_blank" rel="noopener noreferrer">Google Play Console ↗</a></div></section></div>'
+ +'<p class="muted" style="margin-top:20px">This dashboard is protected by a server-verified admin role. Signed-out users and other account holders cannot query these statistics.</p>';
+}
+
 function formField(id,caption,type,name,required=false,extra=""){
  return '<label class="field"><span>'+escape(caption)+'</span><input id="'+escape(id)+'" name="'+escape(name)+'" type="'+escape(type)+'" '+(required?"required":"")+' '+extra+'></label>';
 }
 function render(){
+ if(page==="admin"&&!(auth&&adminOverview))page="account";
+ for(const navButton of document.querySelectorAll('[data-page="admin"]'))navButton.hidden=!(auth&&adminOverview);
  $("#profile-pill").textContent=auth?auth.user.email:"Local profile";
  $("#date-heading").textContent="Your money. Your plan.";
  for(const button of document.querySelectorAll("[data-page]"))button.setAttribute("aria-current",button.dataset.page===page?"page":"false");
- const body={home,transactions,budgets,goals,bills,export:exportPage,account:accountPage}[page]||home;
+ const body={home,transactions,budgets,goals,bills,export:exportPage,account:accountPage,admin:adminPage}[page]||home;
  view.innerHTML=body();
  if(page==="transactions"){
    renderRecords();
@@ -178,6 +208,7 @@ function render(){
 }
 function navigate(next){
  if(!pages.includes(next))next="home";
+ if(next==="admin"&&!(auth&&adminOverview))next="account";
  page=next;location.hash=next;render();window.scrollTo(0,0);
 }
 function showModal(kind,id=0){
@@ -327,6 +358,8 @@ async function settingsAction(action){
   case "import":$("#import-file").click();break;
   case "delete-account":await deleteAccount();break;
   case "signout":await signout();break;
+  case "go-admin":if(adminOverview)navigate("admin");break;
+  case "admin-refresh":await refreshAdminOverview(false);break;
   case "google-login":await signInWithGoogle();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
@@ -372,7 +405,9 @@ async function attachSession(result){
  if(!result||!result.access_token||!result.refresh_token||!result.user||!/^[0-9a-f-]{36}$/i.test(result.user.id))
    throw Error("Account service returned an invalid session.");
  auth={...result,expires_at:Math.floor(Date.now()/1000)+(result.expires_in||900)};
+ adminOverview=null;
  await switchOwner(result.user.id);
+ await refreshAdminOverview(true);
  toast("Signed in. Local account records are now open.");
 }
 async function accessToken(){
@@ -385,6 +420,31 @@ async function accessToken(){
  }
  return auth.access_token;
 }
+
+async function refreshAdminOverview(silent=true){
+ const owner=auth?.user?.id;
+ if(!owner||!config){adminOverview=null;render();return;}
+ try{
+  const token=await accessToken();
+  const response=await fetch(config.url+"/rest/v1/rpc/moneymate_admin_overview",{
+   method:"POST",headers:{"Content-Type":"application/json",apikey:config.publishableKey,Authorization:"Bearer "+token},
+   body:"{}",credentials:"omit",cache:"no-store",redirect:"error",signal:AbortSignal.timeout(20000)
+  });
+  if(auth?.user?.id!==owner)return;
+  if(response.status===401||response.status===403||response.status===404){adminOverview=null;return;}
+  if(!response.ok)throw Error("Admin service unavailable.");
+  const stats=await response.json();
+  if(stats?.role!=="admin"||!Number.isSafeInteger(stats.registered_users)||stats.registered_users<0)
+   throw Error("Invalid admin server response.");
+  adminOverview=stats;
+ }catch{
+  if(auth?.user?.id===owner)adminOverview=null;
+  if(!silent)toast("Unable to load administrator statistics. Please try again.");
+ }finally{
+  if(auth?.user?.id===owner)render();
+ }
+}
+
 function attachAuthForms(){
  $("#signin-form")?.addEventListener("submit",e=>{e.preventDefault();withBusy(async()=>{
   const email=$("#email").value.trim(),password=$("#password").value;
@@ -406,7 +466,7 @@ async function signout(){
   if(!confirm("Sign out? Your account records will stay on this browser and remain hidden until you sign in again."))return;
   try{await authApi("/auth/v1/logout?scope=global","POST",{},await accessToken());}
   catch{toast("Signed out locally. Remote sessions might still be active.");}
-  finally{auth=null;await switchOwner("guest");navigate("account");}
+  finally{adminOverview=null;auth=null;await switchOwner("guest");navigate("account");}
  });
 }
 async function deleteAccount(){
@@ -418,7 +478,7 @@ async function deleteAccount(){
  await withBusy(async()=>{
   const id=auth.user.id;
   await authApi("/functions/v1/delete-account","POST",{password},await accessToken());
-  await dbErase(id);auth=null;
+  await dbErase(id);adminOverview=null;auth=null;
   await switchOwner("guest");navigate("account");
   toast("Account deleted. Browser records for this account have also been removed.");
  });
