@@ -3,12 +3,12 @@ on:
   push:
     paths:
       - 'docs/**'
-      - 'tests/web-core.test.mjs'
+      - 'tests/**'
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'docs/**'
-      - 'tests/web-core.test.mjs'
+      - 'tests/**'
       - '.github/workflows/web.yml'
   workflow_dispatch:
 jobs:
@@ -23,7 +23,9 @@ jobs:
           node-version: '24'
       - run: node --check docs/web-app.js
       - run: node --check docs/web-core.mjs
-      - run: node --test tests/web-core.test.mjs
+      - run: node --check docs/sync-preview/web-app.js
+      - run: node --check docs/sync-preview/sync-policy.mjs
+      - run: node --test tests/*.test.mjs
       - name: Check publishable website files
         run: |
           test -s docs/index.html
