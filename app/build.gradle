@@ -18,6 +18,7 @@ android {
         if (authKey && !(authKey ==~ /sb_publishable_[A-Za-z0-9_-]+/)) throw new GradleException('Use a Supabase publishable key, never an admin key')
         buildConfigField 'String', 'SUPABASE_URL', '"' + authUrl + '"'
         buildConfigField 'String', 'SUPABASE_KEY', '"' + authKey + '"'
+        buildConfigField 'boolean', 'GOOGLE_ENABLED', (publicConfig.googleEnabled == true ? 'true' : 'false')
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     signingConfigs {
