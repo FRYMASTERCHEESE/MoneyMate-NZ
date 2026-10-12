@@ -70,4 +70,29 @@ public class AccountTest {
         AuthClient revoked=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new AuthClient.HttpFailure(401,"revoked");});
         revoked.signin("test@example.invalid","secret");assertFalse(revoked.validateOnline());
     }
+    @Test public void paidBillRecordsOneExpenseAndCanBeRemovedWithoutPaying() throws Exception {
+        Context c=context();
+        String owner="33333333-3333-4333-8333-333333333333";
+        String file=Store.databaseName(owner);
+        c.deleteDatabase(file);
+        try(Store db=new Store(c,owner)) {
+            db.addBill("Electricity",3456,"2026-10-01");
+            assertTrue(db.recordBillPaid(1,"2026-10-12"));
+            assertFalse(db.recordBillPaid(1,"2026-10-12"));
+            assertEquals(3456,db.sum("Expense","2026-10"));
+            try(android.database.Cursor cursor=db.query("SELECT category,note FROM transactions WHERE kind='Expense'")) {
+                assertTrue(cursor.moveToFirst());
+                assertEquals("Bills",cursor.getString(0));
+                assertEquals("Electricity",cursor.getString(1));
+                assertFalse(cursor.moveToNext());
+            }
+            db.addBill("Unpaid example",1000,"2026-10-18");
+            db.deleteBill(2);
+            assertEquals(3456,db.sum("Expense","2026-10"));
+            try(android.database.Cursor cursor=db.query("SELECT COUNT(*) FROM bills")) {
+                assertTrue(cursor.moveToFirst());
+                assertEquals(0,cursor.getLong(0));
+            }
+        } finally {c.deleteDatabase(file);}
+    }
 }
