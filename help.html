@@ -1,8 +1,100 @@
-<!doctype html><html lang="en-NZ"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Help — MoneyMate NZ</title><link rel="stylesheet" href="./account.css"></head><body><a href="./">← MoneyMate NZ</a><h1>Help with MoneyMate NZ</h1>
-<h2>Use on a laptop or Android</h2><p>Open <a href="./">MoneyMate NZ</a> on Windows, macOS, Linux, Android or iPhone using a modern browser. The website offers the same core budgeting sections as the Android test app: Home, Transactions, Budgets, Savings goals, Bills, Export & backup and Account. Your web records are saved in this browser, so no installation is needed. The Android test APK is available from <a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions">GitHub Actions</a>.</p>
-<h2>Transactions and monthly budgets</h2><p>Use the buttons under Home or Transactions to record income or expenses. Search transactions by date, category, type or note. Set monthly category budgets; the progress bars show spending for the selected month.</p>
-<h2>Bills, savings and recurring entries</h2><p>Create goals and add savings contributions. Add bills with due dates; overdue bills are highlighted. Recording a bill as paid adds a Bills expense and removes the bill. No actual banking transaction occurs. Recurring entries are posted when you open the app or site, not while it is closed.</p>
-<h2>Sign up and sign in</h2><p>Use Account for optional Supabase email/password access. Confirm email using the code sent by the configured provider, if available. Password reset is supported by email code. Accounts do <strong>not</strong> automatically synchronize financial records between Android and web.</p>
-<h2>Move data between devices</h2><p>Choose Export & backup → Save full JSON backup, then securely move the file to the other device and select Restore. Restoring replaces that profile's existing financial records, so make another backup first. Never upload financial exports to public GitHub Issues.</p>
-<h2>Privacy and support</h2><p>Read our <a href="./privacy.html">privacy policy</a> and <a href="./delete-account.html">account-deletion page</a>. For public bug reports without personal data, use <a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/issues">GitHub Issues</a>. A dedicated private support email will be published before the Google Play release.</p>
-</body></html>
+<!doctype html>
+<html lang="en-NZ">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Easy step-by-step instructions for MoneyMate NZ on the website and Android, including budgets, bank CSV imports, free points and optional cloud syncing.">
+<meta name="referrer" content="no-referrer"><meta name="theme-color" content="#123f35">
+<title>How to use MoneyMate NZ — Website & Android</title>
+<link rel="stylesheet" href="./account.css">
+<style>
+body{line-height:1.65}
+main{max-width:850px;margin:auto;padding:22px 16px 60px}
+h1{line-height:1.2;margin-top:18px}h2{margin-top:30px}
+a{overflow-wrap:anywhere}
+.lead{font-size:1.12rem}
+.quick-nav{display:flex;flex-wrap:wrap;gap:9px;margin:20px 0}
+.quick-nav a{display:inline-block;border:1px solid #d9e7e0;border-radius:999px;padding:5px 12px;text-decoration:none;background:#f3faf6}
+.steps{padding-left:26px}.steps li{margin:7px 0}
+.note{padding:13px 15px;border-radius:12px;border:1px solid #c6d9d0;background:#f1f9f5;margin:16px 0}
+.warn{background:#fff9ec;border-color:#ead7a8}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;vertical-align:top;border-bottom:1px solid #e0e8e4;padding:9px 5px}
+summary{font-weight:700;cursor:pointer;padding:9px 0}
+</style>
+</head>
+<body><main>
+<a href="./">← Back to MoneyMate NZ</a>
+<h1>💚 How to use MoneyMate NZ</h1>
+<p class="lead">A step-by-step guide for the <strong>website and Android app</strong>. Track income, expenses, budgets, savings goals and bills. Import NZD bank statement CSV files for free. Choose whether to sync your records privately across devices.</p>
+<nav class="quick-nav" aria-label="Help topics">
+<a href="#start">Get started</a><a href="#transactions">Transactions</a><a href="#bank-csv">Bank CSV</a>
+<a href="#budgets">Budgets and bills</a><a href="#points">Points</a><a href="#sync">Sync devices</a><a href="#backup">Backups</a><a href="#faq">Help and safety</a>
+</nav>
+
+<h2 id="start">1. Get started and sign in</h2>
+<ol class="steps">
+<li><strong>Website:</strong> open <a href="https://frymastercheese.github.io/MoneyMate-NZ/">MoneyMate NZ</a> in your browser. It also works on a phone without installing an app.</li>
+<li><strong>Android:</strong> install the test APK from a successful <a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions/workflows/android.yml">Android CI build</a> if you are a tester. Download its build artifact, extract the APK, and install only if you trust the source. This is a test build, not a Google Play release. <strong>Do not uninstall your existing app or clear its data to update it without first backing up your records.</strong></li>
+<li>Open <strong>Account</strong> and sign in with Google (if the button is available) or your email and password. For a new email account, choose Create account and complete email verification if prompted.</li>
+<li>You can also use a separate <strong>local guest profile</strong> without signing in, but guest records are kept on that device and cannot automatically follow your account.</li>
+</ol>
+
+<h2 id="transactions">2. Add income and expenses</h2>
+<ol class="steps">
+<li>Open <strong>Home</strong> or <strong>Transactions</strong>.</li>
+<li>Select <strong>+ Add income</strong> or <strong>+ Add expense</strong>.</li>
+<li>Enter a category (such as Groceries), optional note, amount in NZD and date.</li>
+<li>Press <strong>Save</strong> on the website or in the Android entry form. The transaction appears in the history and monthly summary.</li>
+</ol>
+<p>You can search the transaction history and create repeating income or expense schedules. Recurring transactions are recorded as they become due when you next open the app or website.</p>
+
+<h2 id="bank-csv">3. Import your NZD bank statement for free</h2>
+<div class="note"><strong>No bank connection, paid provider or bank password needed.</strong> You download the CSV yourself from your bank and select it locally in MoneyMate NZ.</div>
+<ol class="steps">
+<li>Visit your bank's <strong>official</strong> website or app and download recent transactions in <strong>CSV format</strong> (not PDF).</li>
+<li><strong>Website:</strong> open <strong>Bank connections → Choose bank CSV file</strong>, or open Transactions → Import bank CSV (free).</li>
+<li><strong>Android:</strong> open <strong>Banking → Import NZD bank statement CSV</strong>, or Transactions / Export → Import bank CSV.</li>
+<li>Choose the downloaded file. Enter a short nickname such as <strong>Everyday</strong> or <strong>Savings</strong>—<em>not</em> your actual account number. Use the same nickname for future CSVs from the same account.</li>
+<li>Review the preview: MoneyMate suggests categories and reports how many new and previously imported transactions it recognises. Confirm to <strong>add</strong> the new rows. Existing records are not replaced.</li>
+</ol>
+<div class="note warn"><strong>NZD only for now.</strong> The current budget totals use NZ dollars, so AUD statements are not supported. Duplicate detection is best-effort: two genuinely identical transactions may be indistinguishable. Review the preview and keep a JSON backup before a big import. Import does <em>not</em> automatically download new bank transactions every day.</div>
+
+<h2 id="budgets">4. Manage budgets, goals and bills</h2>
+<table><thead><tr><th>Section</th><th>What to do</th></tr></thead><tbody>
+<tr><td><strong>Budgets</strong></td><td>Set a monthly NZD limit for Groceries, Transport, Housing or another category. The spending bar shows your progress.</td></tr>
+<tr><td><strong>Goals</strong></td><td>Create a savings target and tap Add savings as you set money aside. This tracks your goal; it does not move money between bank accounts.</td></tr>
+<tr><td><strong>Bills</strong></td><td>Enter a bill name, amount and due date. Tap Record as paid to add a Bills expense and remove it from upcoming bills. It does not actually pay the bill.</td></tr>
+<tr><td><strong>Home</strong></td><td>Review your monthly available balance, income, expenses, spending categories and upcoming/overdue bills.</td></tr>
+</tbody></table>
+
+<h2 id="points">5. Earn MoneyMate Points</h2>
+<ol class="steps">
+<li>Sign in to your MoneyMate NZ account.</li>
+<li>Open <strong>Points & rewards</strong> on the website, or <strong>Rewards</strong> on Android.</li>
+<li>Tap <strong>Claim 10 points</strong> once per UTC day and use Refresh to see your current balance.</li>
+</ol>
+<p>Your points total belongs to your signed-in account, so the same balance can appear on both devices even if financial cloud sync is turned off. Points are participation markers only: they cannot be cashed out, transferred or redeemed and have no money value.</p>
+
+<h2 id="sync">6. Sync Android and website records (optional)</h2>
+<ol class="steps">
+<li>On <strong>each device</strong>, open <strong>Export & backup</strong> or <strong>Export</strong> and save a full <strong>JSON backup</strong> first. Keep the files somewhere private.</li>
+<li>Sign in using the <strong>same Google/email account</strong> on both devices.</li>
+<li>On your main device, open <strong>Account → Enable secure cloud sync</strong> and approve storage of your account's records in Supabase. Wait for confirmation.</li>
+<li>On the other device, open <strong>Account → Enable secure cloud sync</strong>. If it has no financial entries, it can download the saved records. If it already has different entries, MoneyMate should stop and report a conflict instead of silently deleting them.</li>
+<li>Use <strong>Account → Sync now</strong> (website) or <strong>Sync records now</strong> (Android) when you want to check immediately. Normal updates sync automatically while online once enabled.</li>
+</ol>
+<div class="note warn"><strong>Never choose Restore, Use cloud copy or Clear storage to fix a sync conflict unless you have saved independent JSON backups first.</strong> Cloud sync is optional and real two-device testing is still recommended. Data from two independently edited offline devices may require manual conflict resolution.</div>
+
+<h2 id="backup">7. Save a backup and export data</h2>
+<p><strong>Website:</strong> open Export & backup → <strong>Save full JSON backup</strong> to save all supported finance records for the current profile. Use <strong>Export transactions CSV</strong> for a spreadsheet-compatible transaction export.</p>
+<p><strong>Android:</strong> open Export → <strong>Backup all data (JSON)</strong> or <strong>Export CSV</strong> and choose where to save it.</p>
+<p><strong>Restoring JSON replaces the selected profile's existing transactions, budgets, goals and bills.</strong> It is different from bank CSV import, which appends new transactions. Save an additional backup before restoring.</p>
+
+<h2 id="faq">8. Help, safety and common questions</h2>
+<details><summary>Why are my web transactions not showing on Android?</summary><p>Confirm that both devices are signed into the same account and have enabled secure cloud sync in Account. Check the sync status on both. If MoneyMate reports a conflict, save both JSON backups and do not replace one copy blindly.</p></details>
+<details><summary>Why can't I connect a bank automatically?</summary><p>Live automatic bank connections through Akahu (NZ) or Basiq (Australia) still require provider access, consent and security checks. The free bank CSV importer is the available manual alternative.</p></details>
+<details><summary>My bank file will not import. What should I check?</summary><p>Use a CSV export with column headings (for example Date, Amount, Description or Date, Debit, Credit, Details). Make sure the file is in NZD, contains settled transactions and is under 2 MB. Dates may be YYYY-MM-DD or DD/MM/YYYY. Do not upload bank statements to a public issue to request help.</p></details>
+<details><summary>Will I stay logged in after refreshing?</summary><p>Account sessions are designed to persist across refreshes. If you are unexpectedly signed out, check whether private browsing, blocked local storage or cleared app/site data is involved. Report it without including account details or login tokens.</p></details>
+<details><summary>How can I get the newest Android app?</summary><p>Open <a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions/workflows/android.yml">Android CI</a>, select a successful run from the main branch and download its <strong>moneymate-android-build</strong> artifact. Extract the ZIP and install the debug APK for testing. The release bundle is unsigned, not a public Play Store listing. Back up existing data first.</p></details>
+<p>Read the <a href="./privacy.html">privacy policy</a> and <a href="./delete-account.html">account deletion information</a>. Public bug reports can go to <a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/issues">GitHub Issues</a> without passwords, bank details, CSV files or financial exports.</p>
+<p><a href="./">← Return to MoneyMate NZ</a></p>
+</main></body></html>
