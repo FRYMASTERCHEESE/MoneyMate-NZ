@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en-NZ">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MoneyMate NZ — Design Studio</title>
+<meta name="description" content="Choose MoneyMate NZ app colours online and publish them to your Android phone through GitHub Pages.">
+<style>
+:root{font:16px/1.5 system-ui,sans-serif;color:#142928;background:#f5f6ef}
+*{box-sizing:border-box}body{margin:0}header{background:#123f35;color:white;padding:18px max(18px,calc((100vw - 1040px)/2));}
+header a{color:white}main{max-width:1040px;margin:0 auto;padding:30px 18px 65px}h1{font-size:clamp(30px,5vw,45px);margin:12px 0}p{line-height:1.65}
+.layout{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}.panel{background:white;border-radius:22px;padding:24px;box-shadow:0 8px 35px #123f3510}
+label{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:12px 0;border-bottom:1px solid #edf2ee;font-weight:650}
+input[type=color]{width:78px;height:44px;padding:3px;border-radius:10px;border:1px solid #c5d7d0}
+input[type=text]{width:100%;padding:13px;margin:8px 0 20px;border:1px solid #bacfc3;border-radius:12px;font:inherit}
+button,.action{background:#06785b;color:white;border:0;border-radius:12px;padding:13px 17px;font:inherit;font-weight:700;cursor:pointer;display:inline-block;text-decoration:none;margin-top:10px}
+.action.light{background:white;color:#06785b;border:1px solid #06785b}button:disabled{opacity:.4;cursor:not-allowed}
+#preview{border-radius:22px;padding:22px;min-height:310px;background:#f5f6ef}
+#preview .heading{font-size:23px;font-weight:800}#preview .hero{padding:20px;border-radius:18px;color:white;background:#123f35;margin-top:16px}
+#preview .balance{font-size:31px;font-weight:800;margin:5px 0}#preview .btn{border-radius:12px;padding:12px 18px;background:#06785b;color:white;margin-top:16px;display:inline-block}
+#status{padding:14px 0;min-height:42px;font-weight:600}small{color:#527268}code{word-break:break-all}
+@media(max-width:730px){.layout{grid-template-columns:1fr}}
+</style></head>
+<body><header><strong>💚 MoneyMate NZ Design Studio</strong> &nbsp; <a href="./">Home</a></header>
+<main><h1>Update your app's look — without another APK</h1>
+<p>Choose your colours and a welcome message. Copy the theme settings to GitHub, and MoneyMate NZ Android 0.2.1+ will pick them up when you return to the app. Your budget data stays on your phone.</p>
+<div class="layout"><section class="panel"><h2>1. Choose colours</h2>
+<label>Buttons & accents <input id="accent" type="color" value="#06785b"></label>
+<label>Screen background <input id="background" type="color" value="#f5f6ef"></label>
+<label>Text colour <input id="text" type="color" value="#142928"></label>
+<label>Balance card <input id="hero" type="color" value="#123f35"></label>
+<label for="tagline" style="border:0">Welcome subtitle</label>
+<input id="tagline" type="text" maxlength="90" value="A little clarity. A little more confidence.">
+<div id="status" role="status" aria-live="polite"></div>
+<button id="copy">2. Copy design settings</button>
+<p><a class="action light" href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/edit/main/docs/app-theme.json" target="_blank" rel="noopener">3. Open GitHub to paste & save</a></p>
+<p><small>On GitHub: replace the existing JSON with your copied settings, then press <strong>Commit changes</strong>. Wait for your website deployment to finish, then reopen the app or tap <strong>Export → Refresh app colours & text</strong>.</small></p>
+</section>
+<section class="panel"><h2>Live preview</h2>
+<div id="preview"><div class="heading">◈ MoneyMate NZ</div><p id="previewTagline">A little clarity. A little more confidence.</p>
+<div class="hero"><small style="color:white">AVAILABLE THIS MONTH · NZD</small><div class="balance">$2,480.00</div><div>Income $4,200 · Spent $1,720</div></div>
+<div class="btn">+ Add expense</div><p>Example amounts for illustration only.</p></div>
+<p><small>Only these four colours and the subtitle change remotely. New features, app icons and screen layouts still need a signed app update.</small></p></section></div></main>
+<script>
+const ids=['accent','background','text','hero','tagline'];
+const fields=Object.fromEntries(ids.map(id=>[id,document.getElementById(id)]));
+const status=document.getElementById('status');
+function lum(hex){
+ const rgb=[1,3,5].map(i=>parseInt(hex.substring(i,i+2),16)/255).map(x=>x<=.04045?x/12.92:Math.pow((x+.055)/1.055,2.4));
+ return rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722;
+}
+function readable(a,b){const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)>=4.5;}
+function theme(){return {version:1,accent:fields.accent.value.toUpperCase(),background:fields.background.value.toUpperCase(),text:fields.text.value.toUpperCase(),hero:fields.hero.value.toUpperCase(),tagline:fields.tagline.value.trim()};}
+function render(){
+ const t=theme();const prev=document.getElementById('preview');
+ prev.style.background=t.background;prev.style.color=t.text;
+ prev.querySelector('.hero').style.background=t.hero;prev.querySelector('.btn').style.background=t.accent;
+ document.getElementById('previewTagline').textContent=t.tagline;
+ const ok=readable('#ffffff',t.accent)&&readable('#ffffff',t.hero)&&readable(t.text,t.background)&&readable(t.text,'#ffffff')&&t.tagline.length>0;
+ document.getElementById('copy').disabled=!ok;
+ status.textContent=ok?'✓ Readable colours — ready to copy':'Please choose darker buttons/card or higher-contrast text.';
+ status.style.color=ok?'#06785b':'#ad3f24';
+}
+ids.forEach(id=>fields[id].addEventListener('input',render));
+document.getElementById('copy').addEventListener('click',async()=>{
+ const json=JSON.stringify(theme(),null,2)+'\n';
+ try{await navigator.clipboard.writeText(json);status.textContent='✓ Copied! Open GitHub, paste and commit.';}
+ catch(e){const t=document.createElement('textarea');t.value=json;document.body.appendChild(t);t.select();document.execCommand('copy');t.remove();status.textContent='Copied. Open GitHub to save.';}
+});
+fetch('./app-theme.json?ts='+Date.now(),{cache:'no-store'}).then(r=>{if(!r.ok)throw Error('HTTP error');return r.json();}).then(t=>{
+ if(t.version!==1)return;
+ ids.forEach(id=>{if(typeof t[id]==='string')fields[id].value=t[id];});
+ render();
+}).catch(()=>render());
+render();
+</script></body></html>

@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en-NZ"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#123f35">
+<meta name="description" content="MoneyMate NZ is an offline-first NZ dollar budget tracker for Android and your laptop. Manage income, expenses, bills, savings and budgets.">
+<meta name="referrer" content="no-referrer">
+<title>MoneyMate NZ — Your money, your plan</title>
+<link rel="stylesheet" href="./web.css">
+<link rel="icon" type="image/svg+xml" href="./wallet.svg">
+</head><body>
+<div class="shell">
+  <aside class="sidebar" aria-label="MoneyMate NZ navigation">
+    <a href="#home" class="brand"><span class="brand-icon" aria-hidden="true">◈</span><span>MoneyMate <strong>NZ</strong></span></a>
+    <p class="aside-caption">YOUR MONEY. YOUR PLAN.</p>
+    <nav id="nav-side" aria-label="Main sections">
+      <button data-page="home">⌂ <span>Home</span></button>
+      <button data-page="transactions">⇄ <span>Transactions</span></button>
+      <button data-page="budgets">▤ <span>Budgets</span></button>
+      <button data-page="goals">◎ <span>Savings goals</span></button>
+      <button data-page="bills">▦ <span>Bills</span></button>
+      <button data-page="export">⇩ <span>Export & backup</span></button>
+      <button data-page="account">♙ <span>Account</span></button>
+    </nav>
+    <div class="side-foot"><span class="secure-dot" aria-hidden="true"></span> Offline-first · NZD<p>Private local records. No bank connection.</p></div>
+  </aside>
+  <div class="main-shell">
+    <header class="topbar"><div><span class="mobile-brand">◈ MoneyMate NZ</span><span id="date-heading">Good to see you</span></div><span id="profile-pill">Local profile</span></header>
+    <main id="view" tabindex="-1" aria-live="off"><div class="loading">Opening your budget...</div></main>
+    <footer class="foot-links">
+      <span>MoneyMate NZ · Budgeting, not banking or financial advice</span>
+      <div><a href="./privacy.html">Privacy</a><a href="./delete-account.html">Delete account</a><a href="./help.html">Help</a><a href="https://github.com/FRYMASTERCHEESE/MoneyMate-NZ">GitHub</a></div>
+    </footer>
+  </div>
+</div>
+<nav id="nav-mobile" class="mobile-nav" aria-label="Mobile sections">
+  <button data-page="home">⌂<small>Home</small></button>
+  <button data-page="transactions">⇄<small>Activity</small></button>
+  <button data-page="budgets">▤<small>Budgets</small></button>
+  <button data-page="goals">◎<small>Goals</small></button>
+  <button data-page="bills">▦<small>Bills</small></button>
+  <button data-page="export">⇩<small>Files</small></button>
+  <button data-page="account">♙<small>Account</small></button>
+</nav>
+<dialog id="editor"><form id="editor-form" method="dialog"><div class="modal-title"><h2 id="editor-title">Add entry</h2><button type="button" class="close" id="cancel-modal" aria-label="Close">×</button></div>
+  <div id="editor-fields"></div><p class="modal-hint" id="editor-hint"></p>
+  <div class="modal-actions"><button type="button" class="secondary" id="dismiss-modal">Cancel</button><button type="submit" class="primary" id="submit-modal">Save</button></div>
+</form></dialog>
+<div id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="import-file" accept=".json,application/json" hidden>
+<script type="module" src="./web-app.js"></script>
+</body></html>
