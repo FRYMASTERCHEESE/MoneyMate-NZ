@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseCsv,planBankCsv} from '../bank-csv.mjs';
 
-const csv='Date,Amount,Description,Currency\r\n12/10/2026,-50.25,"PAK'nSAVE, Matamata",NZD\r\n13/10/2026,300.10,Salary,NZD\r\n';
+const csv=`Date,Amount,Description,Currency\r\n12/10/2026,-50.25,"PAK'nSAVE, Matamata",NZD\r\n13/10/2026,300.10,Salary,NZD\r\n`;
 test('quoted merchant, CRLF and precise NZD integer cents, with category suggestions',()=>{
  const p=planBankCsv(csv,[],'Everyday');
  assert.equal(p.total,2);assert.equal(p.skipped,0);
