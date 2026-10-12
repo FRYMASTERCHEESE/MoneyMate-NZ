@@ -43,6 +43,7 @@ public final class MainActivity extends Activity {
             applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
         store.postDueRecurring(); show("Home");
+        handleGoogleCallback(getIntent());
         if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
     private void applyTheme(ThemeConfig config) {
@@ -414,6 +415,23 @@ public final class MainActivity extends Activity {
         if(requestCode>=100&&requestCode<=102)documentOwner=Store.databaseName(auth.userId());
         super.startActivityForResult(intent,requestCode);
     }
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleGoogleCallback(intent);
+    }
+    private void handleGoogleCallback(Intent intent) {
+        if(intent==null||intent.getData()==null)return;
+        android.net.Uri uri=intent.getData();
+        if(!"moneymatenz".equals(uri.getScheme())||!"auth".equals(uri.getHost()))return;
+        intent.setData(null); // Consume deep-link code once; never keep in activity state.
+        String[] pkce=GoogleOAuth.consume(this,uri);
+        if(pkce==null){message("Google sign-in expired or could not be completed. Try again.");return;}
+        accountTask(()->auth.exchangeGooglePkce(pkce[0],pkce[1]),()->{
+            switchProfile();
+            message("Google account connected. Your existing records remain protected. You can enable cloud sync under Account.");
+        },false);
+    }
     private void switchProfile() {
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
     }
@@ -428,6 +446,10 @@ public final class MainActivity extends Activity {
             line("Local profile • your existing records are preserved");
             if(!AuthClient.configured()){line("Accounts are not available in this build yet. Local budgeting and backups still work.");return;}
             content.addView(button("Sign in",()->credentialsForm(false)));
+            if(BuildConfig.GOOGLE_ENABLED)content.addView(button("Continue with Google",()->{
+                try{startActivity(GoogleOAuth.start(this));}
+                catch(Exception failure){message("Google sign-in is unavailable. Please use email sign-in.");}
+            }));
             content.addView(button("Create account",()->credentialsForm(true)));
             content.addView(button("Confirm email",()->emailCodeForm(false)));
             content.addView(button("Resend confirmation code",()->emailRequest(false)));
