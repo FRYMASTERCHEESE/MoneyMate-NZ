@@ -120,7 +120,8 @@ public final class BankCsv {
         String label=accountLabel==null?"":accountLabel.trim();
         if(label.length()<1||label.length()>40||label.matches("(?s).*[\\p{Cntrl}].*"))
             throw new IllegalArgumentException("Account nickname must be 1–40 characters");
-        List<List<String>> rows=cells(raw),header=rows.get(0);
+        List<List<String>> rows=cells(raw);
+        List<String> header=rows.get(0);
         int[] ix=new int[COLUMNS.length];
         for(int j=0;j<ix.length;j++)ix[j]=find(header,j);
         if(ix[0]<0)throw new IllegalArgumentException("Missing Date column");
