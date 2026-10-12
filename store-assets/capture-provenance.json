@@ -1,0 +1,17 @@
+{
+  "sourceCommit": "ae06ed33ad0f6dc8f373c4acbccdbd7dc8a24fba",
+  "ciRun": "https://github.com/FRYMASTERCHEESE/MoneyMate-NZ/actions/runs/38183709261",
+  "device": "Pixel 2 emulator, Android 15 (API 35)",
+  "exampleData": true,
+  "debugOnlyAdBannerHidden": true,
+  "screenshots": {
+    "01-welcome.png": "4e5ec0346e57991704c93d0fa5aaaa4f2d5cd4b5129c93cebd92935e56f5a88e",
+    "02-home.png": "d15ca83a02e69c542cd9f8549dd056de9d3a5de17b1e1d06aab95b6149ac867e",
+    "03-spending.png": "7c6276922367c145883324e1d97103acb2984da8fd547b79b908dda09b0af493",
+    "bills.png": "bf4b52e9b1e8b378aba21fda9d3b3f040551b653a9546c330448a72df8c421ea",
+    "budgets.png": "6b88316bf57f2ccd65dd976a627d22b350c8bc35f31c48e382a9a2e5a5b92268",
+    "export.png": "67f75b4221a3d39fe820c662f65b17decdf40f60986377e90184bd0a482c8bbb",
+    "goals.png": "c1cb04aa94bb4059ae07896c2b05874ed44a5c3af983d9d3a041553484397baf",
+    "transactions.png": "60357f3678df93ea0d446e379a099b33b09b7d8d1d4f84739c2bd5b9ceba437a"
+  }
+}

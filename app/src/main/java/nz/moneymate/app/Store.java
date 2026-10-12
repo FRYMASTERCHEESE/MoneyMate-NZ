@@ -9,7 +9,16 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class Store extends SQLiteOpenHelper {
-    public Store(Context c) { super(c, "moneymate.db", null, 2); }
+    public Store(Context c) { this(c, null); }
+    public Store(Context c, String userId) { super(c, databaseName(userId), null, 2); }
+    static String databaseName(String userId) {
+        return userId == null ? "moneymate.db" : "account-" + java.util.UUID.fromString(userId).toString() + ".db";
+    }
+    public boolean isEmpty() {
+        for(String table:new String[]{"transactions","budgets","goals","bills","recurring"})
+            try(Cursor c=query("SELECT COUNT(*) FROM "+table)) {c.moveToFirst();if(c.getLong(0)>0)return false;}
+        return true;
+    }
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT NOT NULL CHECK(kind IN ('Income','Expense')), category TEXT NOT NULL, note TEXT NOT NULL, cents INTEGER NOT NULL CHECK(cents > 0), date TEXT NOT NULL)");
         db.execSQL("CREATE TABLE budgets (category TEXT PRIMARY KEY, cents INTEGER NOT NULL CHECK(cents >= 0))");
@@ -38,6 +47,34 @@ public final class Store extends SQLiteOpenHelper {
     public void addBill(String name,long cents,String due) {
         ContentValues v=new ContentValues();v.put("name",name);v.put("cents",cents);v.put("due",due);
         getWritableDatabase().insertOrThrow("bills",null,v);
+    }
+    /** Record a paid bill as a local expense and remove it from upcoming bills atomically.
+     * This is bookkeeping only; it never transfers money or contacts a bank.
+     * Returns false when the bill is already gone, so repeat taps cannot double charge.
+     */
+    public boolean recordBillPaid(long id, String paidDate) {
+        java.time.LocalDate.parse(paidDate);
+        SQLiteDatabase db=getWritableDatabase();
+        db.beginTransaction();
+        try {
+            String name;
+            long cents;
+            try(Cursor c=db.rawQuery("SELECT name,cents FROM bills WHERE id=?",new String[]{Long.toString(id)})) {
+                if(!c.moveToFirst()) {db.setTransactionSuccessful();return false;}
+                name=c.getString(0);cents=c.getLong(1);
+            }
+            ContentValues expense=new ContentValues();
+            expense.put("kind","Expense");expense.put("category","Bills");
+            expense.put("note",name);expense.put("cents",cents);expense.put("date",paidDate);
+            db.insertOrThrow("transactions",null,expense);
+            if(db.delete("bills","id=?",new String[]{Long.toString(id)})!=1)
+                throw new IllegalStateException("Bill changed before payment recording");
+            db.setTransactionSuccessful();
+            return true;
+        } finally {db.endTransaction();}
+    }
+    public void deleteBill(long id) {
+        getWritableDatabase().delete("bills","id=?",new String[]{Long.toString(id)});
     }
     public void deleteTransaction(long id) { getWritableDatabase().delete("transactions","id=?",new String[]{String.valueOf(id)}); }
     public Cursor query(String sql,String... args) { return getReadableDatabase().rawQuery(sql,args); }

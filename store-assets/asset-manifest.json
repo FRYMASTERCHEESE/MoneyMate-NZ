@@ -1,0 +1,27 @@
+[
+  {
+    "file": "phone-01.png",
+    "capture": "02-home.png",
+    "alt": "A clearer money picture. Your month at a glance. Screenshot with example financial data."
+  },
+  {
+    "file": "phone-02.png",
+    "capture": "03-spending.png",
+    "alt": "See where it goes. A category breakdown that makes sense. Screenshot with example financial data."
+  },
+  {
+    "file": "phone-03.png",
+    "capture": "budgets.png",
+    "alt": "Spend with a plan. Follow your monthly category limits. Screenshot with example financial data."
+  },
+  {
+    "file": "phone-04.png",
+    "capture": "goals.png",
+    "alt": "Save for something good. Track each step towards your goals. Screenshot with example financial data."
+  },
+  {
+    "file": "phone-05.png",
+    "capture": "bills.png",
+    "alt": "Know what\u2019s coming. Keep bills and due dates in view. Screenshot with example financial data."
+  }
+]

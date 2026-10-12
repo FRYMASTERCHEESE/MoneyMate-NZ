@@ -2,7 +2,7 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
-    <application android:allowBackup="false" android:label="MoneyMate NZ" android:theme="@android:style/Theme.Material.Light.NoActionBar" android:usesCleartextTraffic="false">
+    <application android:allowBackup="false" android:label="MoneyMate NZ" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher" android:theme="@style/AppTheme" android:usesCleartextTraffic="false">
         <!-- Google test app ID. Replace with own AdMob app ID before release. -->
         <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-3940256099942544~3347511713"/>
         <activity android:name=".MainActivity" android:exported="true" android:windowSoftInputMode="adjustResize">
