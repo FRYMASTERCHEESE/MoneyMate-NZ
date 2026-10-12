@@ -7,6 +7,9 @@
 - Points are free participation markers. They are not cash, gambling, gift cards, transferable credit or redeemable rewards. There is no money reward or future cash promise. No bank account connection, payment, transaction spending, account balance, or income level is required to claim.
 
 ## PDF bank statements (new, reviewed feature candidate)
+
+**ANZ NZ template candidate:** For ANZ 'Statement of Accounts' PDFs with Date / Transaction type and details / Withdrawals / Deposits / Balance, we now calculate the direction from the change between verified consecutive running balances; '10 Sep' dates are resolved using the explicit statement period. If the balance is missing, the PDF spans multiple accounts, the statement period cannot be validated, or a single amount fails to reconcile exactly, the entire import is refused. Synthetic fixtures for ANZ and other generic signed/debit/credit layouts are unit-tested. **This is NOT verification of any customer's real ANZ PDF or every NZ bank layout**. Other banks may work with compatible, unambiguous formats; the RBNZ registry lists banks, not guaranteed PDF compatibility.
+
 - People can download a **NZD PDF statement** from their own bank and select it under **Bank connections**, **Transactions** or **Export** (Android) without paid bank APIs. This is MANUAL import, not automatic bank linking.
 - The website fetches the pinned PDF.js browser reader code from cdnjs only when requested and processes the PDF bytes in the user's browser. It does not upload the statement document to a PDF service. Text-based PDFs only on the website; image-only scanned PDFs are not supported there yet.
 - Android uses Android PdfRenderer and bundled ML Kit Latin text recognition on-device for text or scanned PDF pages. No off-device OCR service or bank credentials. On-device OCR can misread numbers.
