@@ -1,5 +1,24 @@
 plugins { id 'com.android.application' }
 
+// A real Play submission is deliberately a separately gated, signed build.
+// Ordinary developer/CI builds continue using Google's official test ads.
+def productionRelease = System.getenv('MONEYMATE_PRODUCTION_RELEASE') == 'true'
+def liveAdmobApp = System.getenv('MONEYMATE_ADMOB_APP_ID') ?: ''
+def liveAdmobBanner = System.getenv('MONEYMATE_ADMOB_BANNER_ID') ?: ''
+def testAdmobApp = 'ca-app-pub-3940256099942544~3347511713'
+def testAdmobBanner = 'ca-app-pub-3940256099942544/6300978111'
+if (productionRelease) {
+    if (!(liveAdmobApp ==~ /ca-app-pub-[0-9]{16}~[0-9]{10}/) || liveAdmobApp == testAdmobApp ||
+        !(liveAdmobBanner ==~ /ca-app-pub-[0-9]{16}\/[0-9]{10}/) || liveAdmobBanner == testAdmobBanner)
+        throw new GradleException('A Play release requires your real AdMob app ID and banner unit ID (no test IDs).')
+    for (name in ['MONEYMATE_RELEASE_KEYSTORE_PATH','MONEYMATE_RELEASE_STORE_PASSWORD',
+                  'MONEYMATE_RELEASE_KEY_ALIAS','MONEYMATE_RELEASE_KEY_PASSWORD']) {
+        if (!(System.getenv(name) ?: '').trim()) throw new GradleException('Missing production signing configuration: ' + name)
+    }
+    if (!file(System.getenv('MONEYMATE_RELEASE_KEYSTORE_PATH')).isFile())
+        throw new GradleException('Production signing keystore missing from temporary runner storage')
+}
+
 android {
     namespace 'nz.moneymate.app'
     compileSdk 36
@@ -18,9 +37,20 @@ android {
         if (authKey && !(authKey ==~ /sb_publishable_[A-Za-z0-9_-]+/)) throw new GradleException('Use a Supabase publishable key, never an admin key')
         buildConfigField 'String', 'SUPABASE_URL', '"' + authUrl + '"'
         buildConfigField 'String', 'SUPABASE_KEY', '"' + authKey + '"'
+        buildConfigField 'boolean', 'GOOGLE_ENABLED', (publicConfig.googleEnabled == true ? 'true' : 'false')
+        buildConfigField 'String', 'ADMOB_BANNER_ID', '"' + (productionRelease ? liveAdmobBanner : testAdmobBanner) + '"'
+        manifestPlaceholders = [admobAppId: productionRelease ? liveAdmobApp : testAdmobApp]
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     signingConfigs {
+        production {
+            if (productionRelease) {
+                storeFile file(System.getenv('MONEYMATE_RELEASE_KEYSTORE_PATH'))
+                storePassword System.getenv('MONEYMATE_RELEASE_STORE_PASSWORD')
+                keyAlias System.getenv('MONEYMATE_RELEASE_KEY_ALIAS')
+                keyPassword System.getenv('MONEYMATE_RELEASE_KEY_PASSWORD')
+            }
+        }
         debug {
             def testKey = System.getenv('MONEYMATE_TEST_KEYSTORE_PATH')
             if (testKey && file(testKey).exists()) {
@@ -33,7 +63,10 @@ android {
         }
     }
     buildTypes {
-        release { minifyEnabled false }
+        release {
+            minifyEnabled false
+            if (productionRelease) signingConfig signingConfigs.production
+        }
     }
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17

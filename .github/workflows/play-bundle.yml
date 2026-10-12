@@ -1,0 +1,65 @@
+name: MoneyMate NZ signed Play bundle
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  signed-bundle:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MONEYMATE_PRODUCTION_RELEASE: 'true'
+      MONEYMATE_ADMOB_APP_ID: ${{ secrets.MONEYMATE_ADMOB_APP_ID }}
+      MONEYMATE_ADMOB_BANNER_ID: ${{ secrets.MONEYMATE_ADMOB_BANNER_ID }}
+      MONEYMATE_RELEASE_STORE_PASSWORD: ${{ secrets.MONEYMATE_RELEASE_STORE_PASSWORD }}
+      MONEYMATE_RELEASE_KEY_ALIAS: ${{ secrets.MONEYMATE_RELEASE_KEY_ALIAS }}
+      MONEYMATE_RELEASE_KEY_PASSWORD: ${{ secrets.MONEYMATE_RELEASE_KEY_PASSWORD }}
+      MONEYMATE_KEYSTORE_B64: ${{ secrets.MONEYMATE_RELEASE_KEYSTORE_BASE64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Require explicit real signing and monetization credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          for n in MONEYMATE_ADMOB_APP_ID MONEYMATE_ADMOB_BANNER_ID MONEYMATE_RELEASE_STORE_PASSWORD MONEYMATE_RELEASE_KEY_ALIAS MONEYMATE_RELEASE_KEY_PASSWORD MONEYMATE_KEYSTORE_B64; do
+            if [[ -z "${!n:-}" ]]; then echo "::error::Missing required protected configuration: $n"; exit 1; fi
+          done
+          KEYSTORE_PATH="$RUNNER_TEMP/moneymate-play-upload.p12"
+          echo "MONEYMATE_RELEASE_KEYSTORE_PATH=$KEYSTORE_PATH" >> "$GITHUB_ENV"
+          printf '%s' "$MONEYMATE_KEYSTORE_B64" | base64 --decode > "$KEYSTORE_PATH"
+          chmod 600 "$KEYSTORE_PATH"
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Unit tests and production signed AAB
+        run: gradle --no-daemon :app:testDebugUnitTest :app:bundleRelease
+      - name: Verify signed Android App Bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB=app/build/outputs/bundle/release/app-release.aab
+          test -s "$AAB"
+          jarsigner -verify -strict "$AAB" >/dev/null
+          unzip -t "$AAB" >/dev/null
+          sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
+          echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoneyMate-NZ-Signed-Play-AAB
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/bundle/release/*.sha256
+          retention-days: 7
