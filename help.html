@@ -48,7 +48,7 @@ summary{font-weight:700;cursor:pointer;padding:9px 0}
 <p>You can search the transaction history and create repeating income or expense schedules. Recurring transactions are recorded as they become due when you next open the app or website.</p>
 
 <h2 id="bank-csv">3. Import your NZD bank CSV or PDF statement for free</h2>
-<div class="note"><strong>No bank connection, paid provider or bank password needed.</strong> You download a statement yourself from your bank and select it locally in MoneyMate NZ. PDF support is available for formats that can be parsed reliably.</div>
+<div class="note"><strong>No bank connection, paid provider or bank password needed.</strong> You download a statement yourself from your bank and select it locally in MoneyMate NZ. Experimental PDF support is available for formats that can be parsed reliably. ANZ NZ statements with Withdrawals, Deposits and Balance columns can be checked using the statement dates and running balances; other NZ banks are accepted only when their PDF layout is unambiguous.</div>
 <ol class="steps">
 <li>Visit your bank's <strong>official</strong> website or app and download your transactions as a <strong>CSV or PDF statement</strong>.</li>
 <li><strong>Website:</strong> open <strong>Bank connections → Choose bank CSV file</strong> or <strong>Choose bank PDF file</strong>. Transactions also has both import choices.</li>
@@ -56,7 +56,7 @@ summary{font-weight:700;cursor:pointer;padding:9px 0}
 <li>Choose the downloaded file. Enter a short nickname such as <strong>Everyday</strong> or <strong>Savings</strong>—<em>not</em> your actual account number. Use the same nickname for future CSVs from the same account.</li>
 <li>Review the preview: MoneyMate suggests categories and reports how many new and previously imported transactions it recognises. For PDF, check <strong>every</strong> extracted amount, date and income/expense direction against your original statement; scanned pages may be misread. Confirm to <strong>add</strong> the new rows. Existing records are not replaced.</li>
 </ol>
-<div class="note warn"><strong>NZD only for now.</strong> The current budget totals use NZ dollars, so AUD statements are not supported. Duplicate detection is best-effort: two genuinely identical transactions may be indistinguishable. Review the preview and keep a JSON backup before a big import. Import does <em>not</em> automatically download new bank transactions every day.</div>
+<div class="note warn"><strong>NZD only for now.</strong> The current budget totals use NZ dollars, so AUD statements are not supported. Duplicate detection is best-effort: two genuinely identical transactions may be indistinguishable. Review the preview and keep a JSON backup before a big import. Import does <em>not</em> automatically download new bank transactions every day. Not every ANZ, ASB, BNZ, Westpac, Kiwibank, TSB, SBS, Co-operative Bank, Heartland, Rabobank or other NZ bank PDF format is verified. See the <a href="https://www.rbnz.govt.nz/regulation-and-supervision/cross-sector-oversight/registers-of-entities-we-regulate/registered-banks-in-new-zealand">NZ bank register</a>. Never publicly share an unredacted statement.</div>
 
 <h2 id="budgets">4. Manage budgets, goals and bills</h2>
 <table><thead><tr><th>Section</th><th>What to do</th></tr></thead><tbody>
