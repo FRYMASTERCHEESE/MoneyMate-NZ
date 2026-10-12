@@ -155,6 +155,7 @@ function accountPage(){
     +'<div class="notice">'+escape(cloudStatus)+'</div>'
     +'<div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))
     +(cloudStatus.includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")
+    +(localEmpty(data)?btn("Copy guest records into this account","import-guest","secondary"):"")
     +btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
@@ -345,6 +346,7 @@ async function settingsAction(action){
   case "cloud-sync":await syncCloud(true);break;
   case "cloud-download":await chooseCloudCopy();break;
   case "google-login":await signInWithGoogle();break;
+  case "import-guest":await copyGuest();break;
   case "confirm":showAuthModal("confirm");break;
   case "recover":showAuthModal("recover");break;
   case "resend":showAuthModal("resend");break;
@@ -674,6 +676,17 @@ async function finishGoogleSignin(){
   const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
   await attachSession(session);navigate("account");
  }catch(error){errorMessage(error);}
+}
+
+
+async function copyGuest(){
+ if(!auth)return;
+ if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");
+ const original=await dbRead("guest");
+ if(localEmpty(original)){toast("No guest records to copy.");return;}
+ if(!confirm("Copy guest income, expenses, budgets, goals, bills and repeating entries into this empty account? The guest records are preserved, and cloud sync will only upload after your consent."))return;
+ await save(original);
+ toast("Guest records copied safely. The original guest profile was not changed.");
 }
 
 async function bootstrap(){
