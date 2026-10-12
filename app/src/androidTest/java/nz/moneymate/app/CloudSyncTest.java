@@ -11,7 +11,7 @@ import static org.junit.Assert.*;
 /** Offline regression coverage for the same revision/consent rules used on the website. */
 @RunWith(AndroidJUnit4.class)
 public class CloudSyncTest {
-    private final String empty="{\\"format\\":\\"MoneyMateNZ\\",\\"version\\":1,\\"transactions\\":[],\\"budgets\\":[],\\"goals\\":[],\\"bills\\":[],\\"recurring\\":[]}";
+    private final String empty="{\"format\":\"MoneyMateNZ\",\"version\":1,\"transactions\":[],\"budgets\":[],\"goals\":[],\"bills\":[],\"recurring\":[]}";
     private String changed() throws Exception {
         JSONObject copy=new JSONObject(empty);
         copy.getJSONArray("transactions").put(new JSONObject()
