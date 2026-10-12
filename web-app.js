@@ -1,4 +1,5 @@
 import {planBankCsv} from "./bank-csv.mjs";
+import {pdfStatementToCsv,pdfFileToLines} from "./pdf-statement.mjs";
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 import {decideSync} from "./sync-policy.mjs";
@@ -101,7 +102,7 @@ function renderRecords(){
 }
 function transactions(){
  let markup=heading("Transactions","Track every dollar coming in and going out.");
- markup+='<div class="btns">'+btn("+ Income","income")+btn("+ Expense","expense","secondary")+btn("Add repeating entry","recurring","secondary")+btn("Import bank CSV (free)","bank-csv","secondary")+'</div>';
+ markup+='<div class="btns">'+btn("+ Income","income")+btn("+ Expense","expense","secondary")+btn("Add repeating entry","recurring","secondary")+btn("Import bank CSV (free)","bank-csv","secondary")+btn("Import bank PDF (free)","bank-pdf","secondary")+'</div>';
  markup+='<section class="panel"><div class="section-row" style="margin-top:0"><h2 style="margin:0">Transaction history</h2><span class="tag">Last 300 entries</span></div>'
  +'<label class="field"><span>Search date, category, type or note</span><input class="search" id="history-search" type="search" placeholder="Search transactions…" value="'+escape(searchTerm)+'"></label><div id="transaction-records"></div></section>';
  markup+='<section class="panel" style="margin-top:19px"><h2>Recurring schedules</h2>'
@@ -182,8 +183,8 @@ function rewardsPage(){
 }
 function bankingPage(){
  return heading("Bank connections","Import NZD bank statements free, or check future NZ and Australian automatic bank connections.")
-  +'<section class="panel"><h2>Free bank CSV import · NZD</h2><p>Download a CSV statement from your bank, then choose the file. This works offline, requires no bank access and costs $0 in provider fees.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
- +'<div class="notice warning"><strong>Not available yet.</strong> Actual bank linking must await provider onboarding, security checks and user consent. Never enter banking passwords into MoneyMate NZ. The app does not currently import bank transactions.</div>'
+  +'<section class="panel"><h2>Free NZD statement imports · CSV or PDF</h2><p>Choose a bank CSV or text-based PDF statement downloaded from your bank. Neither needs a bank connection or paid provider. PDF extraction happens in your browser; PDF.js code downloads when you use it, and the file is never uploaded to a PDF service.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Choose bank PDF file","bank-pdf","secondary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
+ +'<div class="notice warning"><strong>Not available yet.</strong> Actual bank linking must await provider onboarding, security checks and user consent. Never enter banking passwords into MoneyMate NZ. Automatic bank transaction downloads are not available.</div>'
  +'<div class="grid-2"><section class="panel"><h2>🇳🇿 New Zealand</h2><p>Planned: Akahu official open-banking connection, depending on bank availability.</p><span class="tag">Provider approval required</span><p><a href="https://www.akahu.nz/" target="_blank" rel="noopener noreferrer">About Akahu ↗</a></p></section>'
  +'<section class="panel"><h2>🇦🇺 Australia</h2><p>Planned: Basiq Consumer Data Right account connection with bank-approved consent.</p><span class="tag">Provider approval required</span><p><a href="https://www.basiq.io/" target="_blank" rel="noopener noreferrer">About Basiq ↗</a></p></section></div>'
  +'<section class="panel"><h2>How connections will work</h2><p class="muted">You will choose a participating bank, approve read-only access with the bank or accredited provider, and allow imported transactions into your profile. You will be able to disconnect. Import deduplication and separate NZD/AUD currency handling must pass testing first. Do not enter banking credentials on this website.</p></section>';
@@ -391,6 +392,62 @@ function download(filename,content,type){
  link.href=url;link.download=filename;link.click();
  setTimeout(()=>URL.revokeObjectURL(url),60000);
 }
+async function approvePdfRows(plan){
+ return await new Promise(resolve=>{
+  const dialog=document.createElement("dialog");
+  dialog.style.maxWidth="min(95vw,650px)";
+  dialog.style.width="95vw";
+  dialog.style.padding="20px";
+  dialog.style.borderRadius="16px";
+  const title=document.createElement("h2");title.textContent="Review ALL PDF transactions";
+  const explanation=document.createElement("p");
+  explanation.textContent=plan.total+" PDF rows; "+plan.skipped+" previously imported; "+plan.toAdd.length+" NEW entries. This preview is mandatory because PDF extraction can mix up text or amounts. Compare every row against your bank statement. Only NZD is supported.";
+  const viewport=document.createElement("div");viewport.style.maxHeight="49vh";viewport.style.overflow="auto";
+  viewport.style.border="1px solid #bbb";viewport.style.padding="8px";
+  for(let i=0;i<plan.toAdd.length;i++){
+   const entry=plan.toAdd[i],item=document.createElement("p");
+   item.textContent=(i+1)+". "+entry.date+" · "+entry.kind+" · "+nzd(entry.cents)+" · "+entry.note.replace(/^Bank CSV \([^)]+\):\s*/,"");
+   viewport.append(item);
+  }
+  const approveLabel=document.createElement("label");
+  const check=document.createElement("input");check.type="checkbox";check.style.marginRight="10px";
+  approveLabel.append(check,document.createTextNode("I checked the dates, directions and amounts against the original PDF."));
+  const buttons=document.createElement("div");buttons.style.display="flex";buttons.style.gap="10px";buttons.style.marginTop="18px";
+  const cancel=document.createElement("button");cancel.type="button";cancel.textContent="Cancel";
+  const yes=document.createElement("button");yes.type="button";yes.textContent="Import these NZD transactions";yes.disabled=true;
+  check.addEventListener("change",()=>{yes.disabled=!check.checked;});
+  const finish=ok=>{dialog.close();dialog.remove();resolve(ok);};
+  cancel.addEventListener("click",()=>finish(false));
+  yes.addEventListener("click",()=>finish(true));
+  dialog.addEventListener("cancel",event=>{event.preventDefault();finish(false);});
+  buttons.append(cancel,yes);dialog.append(title,explanation,viewport,approveLabel,buttons);
+  document.body.append(dialog);dialog.showModal();
+ });
+}
+async function importBankPdfFile(file){
+ if(!file)return;
+ const owner=profile,baseline=JSON.stringify(data);
+ try{
+  if(file.size>4000000)throw Error("Bank PDF is larger than 4 MB.");
+  const nickname=window.prompt("Bank nickname, such as Everyday. Reuse the same nickname for later statement imports. Never enter your account number.","Everyday");
+  if(nickname===null)return;
+  toast("Reading bank PDF locally. This can take a moment.");
+  const lines=await pdfFileToLines(file);
+  const converted=pdfStatementToCsv(lines);
+  const planned=planBankCsv(converted,data.transactions,nickname);
+  if(owner!==profile||baseline!==JSON.stringify(data))throw Error("Your financial records changed. Try again.");
+  if(!planned.toAdd.length){toast("No new PDF transactions found. Skipped "+planned.skipped+" duplicates.");return;}
+  if(planned.toAdd.length>200)throw Error("For safety, split the PDF into statements of 200 transactions or fewer.");
+  if(data.transactions.length+planned.toAdd.length>100000)throw Error("Too many transactions.");
+  if(!await approvePdfRows(planned))return;
+  if(owner!==profile||baseline!==JSON.stringify(data))throw Error("Your data changed while reviewing the PDF. No transactions were added.");
+  const next=structuredClone(data);
+  for(const row of planned.toAdd)next.transactions.push({id:nextId(next.transactions),...row});
+  strictData(next);await save(next);
+  toast("Added "+planned.toAdd.length+" reviewed PDF transactions.");
+ }catch(error){errorMessage(error);}
+ finally{$("#bank-pdf-file").value="";}
+}
 async function importBankCsvFile(file){
  if(!file)return;
  const owner=profile,baseline=JSON.stringify(data);
@@ -434,6 +491,7 @@ async function settingsAction(action){
   case "backup":download("MoneyMate-NZ-backup-"+today()+".json",JSON.stringify(data,null,2),"application/json");break;
   case "import":$("#import-file").click();break;
   case "bank-csv":$("#bank-csv-file").click();break;
+  case "bank-pdf":$("#bank-pdf-file").click();break;
   case "delete-account":await deleteAccount();break;
   case "signout":await signout();break;
   case "go-admin":if(adminOverview)navigate("admin");break;
@@ -472,6 +530,7 @@ $("#cancel-modal").addEventListener("click",()=>editor.close());
 $("#dismiss-modal").addEventListener("click",()=>editor.close());
 $("#import-file").addEventListener("change",e=>importFile(e.target.files[0]));
 $("#bank-csv-file").addEventListener("change",e=>importBankCsvFile(e.target.files[0]));
+$("#bank-pdf-file").addEventListener("change",e=>importBankPdfFile(e.target.files[0]));
 window.addEventListener("hashchange",()=>{const p=location.hash.replace(/^#/,"");if(p!==page&&pages.includes(p)){page=p;render();}});
 function requireConfig(){if(!config)throw Error("Account service is not configured. Local budgeting still works.");}
 async function authApi(path,method="POST",body={},token=null){
