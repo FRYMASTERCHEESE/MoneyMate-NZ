@@ -528,6 +528,7 @@ public final class MainActivity extends Activity {
         line("Free NZD bank statement imports are available from CSV or PDF files. PDF text recognition runs on your device, but some layouts may fail. Neither requires a bank login inside MoneyMate NZ or provider fees.");
         content.addView(button("Import NZD bank statement CSV",()->chooseBankCsv()));
         content.addView(button("Import NZD bank statement PDF (free)",()->chooseBankPdf()));
+        line("ANZ NZ statements with Withdrawals / Deposits / Balance can be checked using running balances. ASB, BNZ, Westpac, Kiwibank, TSB, SBS, The Co-operative Bank, Heartland, Rabobank and other NZ bank PDFs may work when the transaction table is clear, but each bank layout still needs real-world testing.");
         line("Automatic bank connections are NOT LIVE. AUD statement imports are blocked until separate AUD budgets are available.");
         line("New Zealand: accredited Akahu open banking. Australia: Basiq Consumer Data Right. Both require approved provider onboarding before people can connect.");
         content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
