@@ -5,7 +5,7 @@
 - Live web: https://frymastercheese.github.io/MoneyMate-NZ/
 - Public [step-by-step website and Android guide](https://frymastercheese.github.io/MoneyMate-NZ/help.html)
 - Source: `FRYMASTERCHEESE/MoneyMate-NZ`
-- Android application ID: `nz.moneymate.app`; current release-candidate test version **0.3.4**, version code **8**.
+- Android application ID: `nz.moneymate.app`; current test version **0.3.5**, version code **9**.
 
 ## Implemented and automated-test coverage
 
@@ -30,6 +30,8 @@ Requires Android SDK platform 36, JDK 17 and Gradle 8.13:
 gradle :app:testDebugUnitTest :app:assembleDebug :app:bundleRelease
 node --test tests/*.test.mjs
 ```
+
+Run `npm ci --ignore-scripts` first for the browser storage emulator used by regression tests. Version 0.3.5 adds atomic browser sync/restore guards, category-independent statement duplicate checks, exact CSV export reimports, stricter Android backup validation, and server-side snapshot validation. No customer records or local database schemas are rewritten. Google sign-in configuration is unchanged.
 
 ## What is not yet verified or enabled
 
