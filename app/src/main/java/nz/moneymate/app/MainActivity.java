@@ -515,6 +515,19 @@ public final class MainActivity extends Activity {
             message("Google account connected. Your existing records remain protected. You can enable cloud sync under Account.");
         },false);
     }
+    private void signInWithGoogleOnDevice(){
+        if(accountBusy||auth.userId()!=null)return;
+        NativeGoogleSignIn.start(this,BuildConfig.GOOGLE_WEB_CLIENT_ID,idToken->{
+            if(isFinishing()||isDestroyed()||auth.userId()!=null)return;
+            accountTask(()->auth.exchangeGoogleIdToken(idToken),()->{
+                switchProfile();
+                message("Google account connected. Your existing financial records are preserved.");
+            },false);
+        },()->{
+            if(!isFinishing()&&!isDestroyed())
+                message("On-device Google sign-in unavailable. Use Google sign-in via browser (backup) below.");
+        });
+    }
     private void switchProfile() {
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
     }
@@ -566,10 +579,14 @@ public final class MainActivity extends Activity {
             line("Local profile • your existing records are preserved");
             if(!AuthClient.configured()){line("Accounts are not available in this build yet. Local budgeting and backups still work.");return;}
             content.addView(button("Sign in",()->credentialsForm(false)));
-            if(BuildConfig.GOOGLE_ENABLED)content.addView(button("Continue with Google",()->{
-                try{startActivity(GoogleOAuth.start(this));}
-                catch(Exception failure){message("Google sign-in is unavailable. Please use email sign-in.");}
-            }));
+            if(BuildConfig.GOOGLE_ENABLED){
+                if(!BuildConfig.GOOGLE_WEB_CLIENT_ID.isEmpty())
+                    content.addView(button("Continue with Google",()->signInWithGoogleOnDevice()));
+                content.addView(button("Google sign-in via browser (backup)",()->{
+                    try{startActivity(GoogleOAuth.start(this));}
+                    catch(Exception failure){message("Browser Google sign-in unavailable. Please use email sign-in.");}
+                }));
+            }
             content.addView(button("Create account",()->credentialsForm(true)));
             content.addView(button("Confirm email",()->emailCodeForm(false)));
             content.addView(button("Resend confirmation code",()->emailRequest(false)));

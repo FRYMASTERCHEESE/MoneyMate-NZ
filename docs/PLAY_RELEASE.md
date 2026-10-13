@@ -40,3 +40,9 @@ The workflow runs tests, validates the production ad identifiers, signs the `.aa
 ## Points retirement and Play Console rejection (13 October 2026)
 
 Version 0.3.6 (10) removes MoneyMate Points from website and Android candidate sources. Historical records are retained. Apply the revoke-only migration only after new clients have rolled out. Removing points does not guarantee a Personal Google Play developer account is eligible under Google's organization-account financial services requirements. Confirm the correct classification before resubmitting. The previously rejected version 0.3.5 (9) bundle is unchanged; code 10 requires a new signed AAB.
+
+## Direct Google sign-in candidate (0.3.7 / version code 11)
+
+This candidate adds an official Google sign-in button on the website and Android Credential Manager sign-in; both use the public Google OAuth Web Client ID and have Supabase validate the Google ID token. Existing browser PKCE OAuth remains accessible as a fallback. This is not a custom domain and does not edit any saved account or financial data.
+
+**Hold before production:** Configure the Google Cloud **Android OAuth client** with `nz.moneymate.app` and the **Google Play App Signing key SHA-1** from Play Console → App integrity. For local test APKs, also register the debug certificate SHA-1 separately. Configure Web OAuth authorized JavaScript origins (`https://frymastercheese.github.io`). Test an existing Google account on real Play-signed Android and on the website and verify the same Supabase user ID and unchanged existing financial records. Keep the browser backup while testing. Google Play will require a new signed bundle with code 11 if and when approved. This change does not resolve the separate Play Console organization-account policy issue.
