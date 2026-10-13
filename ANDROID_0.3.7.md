@@ -10,8 +10,11 @@ CI runs debug and release unit tests, release lint, debug APK and unsigned relea
 AAB builds, all JavaScript regressions, and the existing instrumentation suite
 against debug and an optimised `nz.moneymate.app.r8test` package on fresh emulators.
 The test variant has the same R8 settings as release and uses debug signing only.
-Instrumentation-generated keep rules may retain test-accessed code in that
-variant: use the actual release mapping/AAB for optimisation evidence.
+Test-only keep rules retain APIs called directly from the separate test APK and
+shared tracing/Kotlin runtime APIs. Method-body optimisation remains enabled,
+but this variant cannot verify removal/renaming of those retained APIs: use the
+actual release mapping/AAB for optimisation evidence, and manually smoke-test
+the exact release APK before production distribution.
 
 Existing tests cover budgeting, profile isolation, encrypted sessions, mocked
 sign-in/recovery/logout, revision conflicts, CSV imports, parser fixtures, and

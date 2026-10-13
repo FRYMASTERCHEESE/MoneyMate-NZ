@@ -5,3 +5,16 @@
 # The separately compiled AndroidX test runtime also shares Kotlin stdlib with
 # the app. Its bytecode references the original public runtime API names.
 -keep,allowoptimization class kotlin.** { *; }
+# These existing white-box tests call app APIs from a separate APK. R8 cannot
+# infer those external uses when compiling the app; retain their signatures in
+# this variant while allowing method-body optimisation. Do not copy to release.
+-keep,allowoptimization class nz.moneymate.app.Store { *; }
+-keep,allowoptimization class nz.moneymate.app.SessionVault { *; }
+-keep,allowoptimization class nz.moneymate.app.AuthClient { *; }
+-keep,allowoptimization class nz.moneymate.app.AuthClient$* { *; }
+-keep,allowoptimization class nz.moneymate.app.CloudSync { *; }
+-keep,allowoptimization class nz.moneymate.app.CloudSync$* { *; }
+-keep,allowoptimization class nz.moneymate.app.BankCsv { *; }
+-keep,allowoptimization class nz.moneymate.app.BankCsv$* { *; }
+-keep,allowoptimization class nz.moneymate.app.PdfStatement { *; }
+-keep,allowoptimization class nz.moneymate.app.PdfStatementReader { *; }
