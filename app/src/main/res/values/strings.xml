@@ -1,0 +1,7 @@
+<resources>
+    <string name="default_account_nickname">Everyday</string>
+    <string name="account_signup_consent">I have read the privacy policy and agree to create an account</string>
+    <string name="pdf_review_warning">Review ALL %1$d rows against the PDF. %2$d NEW, %3$d previously imported. OCR may misread digits, dates, debit and credit. No entry has been saved yet.</string>
+    <string name="pdf_review_row">%1$d. %2$s · %3$s · %4$s · %5$s</string>
+    <string name="pdf_review_acceptance">I checked every row against the original bank PDF.</string>
+</resources>

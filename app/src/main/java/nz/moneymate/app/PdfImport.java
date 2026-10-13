@@ -19,7 +19,7 @@ final class PdfImport {
         try{baseline=store.backupJson();}
         catch(Exception e){error(activity,"Could not prepare a safety snapshot. Nothing was added.");return;}
         final EditText nickname=new EditText(activity);
-        nickname.setSingleLine(true);nickname.setText("Everyday");
+        nickname.setSingleLine(true);nickname.setText(R.string.default_account_nickname);
         nickname.setHint("Account nickname, NOT account number");
         new AlertDialog.Builder(activity).setTitle("Read NZD bank PDF for free")
             .setMessage("Choose the same nickname for future statements from this account. Text recognition runs on this phone, but PDF figures may be misread. You must check every transaction before saving.")
@@ -68,9 +68,7 @@ final class PdfImport {
         int pad=(int)(activity.getResources().getDisplayMetrics().density*15);
         box.setPadding(pad,pad,pad,pad);
         TextView warning=new TextView(activity);
-        warning.setText("Review ALL "+entries.size()+" rows against the PDF. "
-            +preview.inserted+" NEW, "+preview.skipped+" previously imported. "
-            +"OCR may misread digits, dates, debit and credit. No entry has been saved yet.");
+        warning.setText(activity.getString(R.string.pdf_review_warning, entries.size(), preview.inserted, preview.skipped));
         box.addView(warning);
         ScrollView scroll=new ScrollView(activity);
         LinearLayout list=new LinearLayout(activity);list.setOrientation(LinearLayout.VERTICAL);
@@ -78,14 +76,13 @@ final class PdfImport {
             BankCsv.Entry row=entries.get(i);
             TextView item=new TextView(activity);
             item.setPadding(0,pad/3,0,pad/3);
-            item.setText((i+1)+". "+row.date+" · "+row.kind+" · "+MoneyMath.format(row.cents)
-                +" · "+row.note);
+            item.setText(activity.getString(R.string.pdf_review_row, i+1, row.date, row.kind, MoneyMath.format(row.cents), row.note));
             list.addView(item);
         }
         scroll.addView(list);
         box.addView(scroll,new LinearLayout.LayoutParams(-1,(int)(320*activity.getResources().getDisplayMetrics().density)));
         CheckBox accepted=new CheckBox(activity);
-        accepted.setText("I checked every row against the original bank PDF.");
+        accepted.setText(R.string.pdf_review_acceptance);
         box.addView(accepted);
         AlertDialog confirm=new AlertDialog.Builder(activity).setTitle("Confirm PDF transactions")
             .setView(box).setNegativeButton("Cancel",null)

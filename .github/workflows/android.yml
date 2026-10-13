@@ -8,6 +8,10 @@ concurrency:
   cancel-in-progress: true
 jobs:
   verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [35, 36]
     runs-on: ubuntu-latest
     env:
       MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
@@ -48,9 +52,14 @@ jobs:
         env:
           MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
           MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
-        run: gradle --no-daemon :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
-      - name: Report existing release lint findings
-        continue-on-error: true
+        run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
+      - name: Verify production release refuses missing protected configuration
+        run: |
+          if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
+            echo '::error::Production gate unexpectedly allowed missing release configuration'; exit 1
+          fi
+          grep -q 'A Play release requires your real AdMob app ID' "$RUNNER_TEMP/production-gate.txt"
+      - name: Require clean release lint
         run: gradle --no-daemon :app:lintRelease
       - name: Build optimised instrumentation APKs before starting emulator
         run: gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:assembleR8Test :app:assembleR8TestAndroidTest
@@ -69,7 +78,7 @@ jobs:
       - name: Verify debug and optimised app on a fresh emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
           profile: pixel_2
           disable-animations: true
@@ -91,7 +100,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: moneymate-visual-verification
+          name: moneymate-visual-verification-api-${{ matrix.api-level }}
           path: |
             screenshots/
             app/build/reports/androidTests/
@@ -103,7 +112,7 @@ jobs:
       - name: Upload test APK and unsigned release AAB
         uses: actions/upload-artifact@v4
         with:
-          name: moneymate-android-build
+          name: moneymate-android-build-api-${{ matrix.api-level }}
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab

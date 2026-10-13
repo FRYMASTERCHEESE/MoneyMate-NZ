@@ -18,3 +18,9 @@
 -keep,allowoptimization class nz.moneymate.app.BankCsv$* { *; }
 -keep,allowoptimization class nz.moneymate.app.PdfStatement { *; }
 -keep,allowoptimization class nz.moneymate.app.PdfStatementReader { *; }
+# Back-navigation regression calls these APIs across the test APK boundary.
+-keep,allowoptimization class androidx.activity.ComponentActivity { *; }
+-keep,allowoptimization class androidx.activity.OnBackPressedDispatcher { *; }
+-keep,allowoptimization class androidx.activity.OnBackPressedCallback { *; }
+-keep,allowoptimization class nz.moneymate.app.MainActivity { void setAccountBusy(boolean); }
+-keep,allowoptimization class nz.moneymate.app.GoogleOAuth { *; }

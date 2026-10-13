@@ -89,6 +89,7 @@ android {
     buildFeatures { buildConfig true }
 }
 dependencies {
+    implementation 'androidx.activity:activity:1.10.1'
     implementation 'com.google.mlkit:text-recognition:16.0.1' // bundled, on-device Latin OCR; no per-bank fees
     implementation 'com.google.android.gms:play-services-ads:24.5.0'
     implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
@@ -96,4 +97,19 @@ dependencies {
     androidTestImplementation 'androidx.test:runner:1.6.2'
     androidTestImplementation 'androidx.test.ext:junit:1.2.1'
     androidTestImplementation 'androidx.test.uiautomator:uiautomator:2.3.0'
+}
+
+// Check production build settings without opening, generating or changing keys.
+tasks.register('verifyReleaseConfiguration') {
+    doLast {
+        def release = android.buildTypes.release
+        assert android.defaultConfig.applicationId == 'nz.moneymate.app'
+        assert android.defaultConfig.versionCode == 11
+        assert android.defaultConfig.versionName == '0.3.7'
+        assert release.minifyEnabled && release.shrinkResources
+        assert release.proguardFiles.contains(file('proguard-rules.pro'))
+        assert !release.proguardFiles.contains(file('proguard-instrumentation.pro'))
+        assert productionRelease ? release.signingConfig == android.signingConfigs.production : release.signingConfig == null
+        println 'Verified MoneyMate 0.3.7 (11), production package, R8/resource shrinking, isolated test rules and gated signing.'
+    }
 }
