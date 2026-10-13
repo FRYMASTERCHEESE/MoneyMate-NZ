@@ -76,7 +76,7 @@ public final class MainActivity extends Activity {
         cloudTimer.postDelayed(periodicCloudCheck,45000L);
         if(auth.userId()!=null)requestCloudSync(false);
         // Automatically check the public theme on launch/return.
-        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
+        if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
     @Override protected void onPause(){cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}

@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 10
-        versionName '0.3.6'
+        versionCode 11
+        versionName '0.3.7'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -64,10 +64,21 @@ android {
     }
     buildTypes {
         release {
-            minifyEnabled false
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (productionRelease) signingConfig signingConfigs.production
         }
+        // Fresh emulator only: existing instrumentation tests reset synthetic data.
+        // Exercise release optimisation without using the production signing key.
+        r8Test {
+            initWith release
+            applicationIdSuffix '.r8test'
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
+        }
     }
+    testBuildType providers.gradleProperty('moneymateTestBuildType').getOrElse('debug')
     compileOptions {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
