@@ -36,3 +36,7 @@ The workflow runs tests, validates the production ad identifiers, signs the `.aa
 - Enable leaked-password protection in Supabase Auth security settings if available, or document plan limitations; audit SECURITY DEFINER RPCs and rerun security advisors.
 - Publish a monitored developer support/privacy email and accurate final identity, analytics, SMTP and retention disclosures; complete required Google Play policy declarations and screenshots.
 - Configure a stable private upload signing key (never share it in chat). Manually trigger the signed Play bundle workflow and inspect its signature before uploading. A successful debug APK does not prove a Play AAB is ready.
+
+## Points retirement and Play Console rejection (13 October 2026)
+
+Version 0.3.6 (10) removes MoneyMate Points from website and Android candidate sources. Historical records are retained. Apply the revoke-only migration only after new clients have rolled out. Removing points does not guarantee a Personal Google Play developer account is eligible under Google's organization-account financial services requirements. Confirm the correct classification before resubmitting. The previously rejected version 0.3.5 (9) bundle is unchanged; code 10 requires a new signed AAB.

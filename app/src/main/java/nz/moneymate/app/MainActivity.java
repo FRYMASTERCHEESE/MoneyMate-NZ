@@ -37,9 +37,6 @@ public final class MainActivity extends Activity {
     private long lastCloudAttempt;
     private boolean cloudBusy=false,ignoreNextAutoSync=false;
     private String cloudStatus="Cloud syncing is not enabled";
-    private boolean rewardsBusy=false,rewardsRequested=false,dailyClaimed=false;
-    private long rewardPoints=-1;
-    private String rewardAccount=null;
     private final android.os.Handler cloudTimer=new android.os.Handler(android.os.Looper.getMainLooper());
     private final Runnable periodicCloudCheck=new Runnable(){
         @Override public void run() {
@@ -161,12 +158,12 @@ public final class MainActivity extends Activity {
         content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Rewards": rewards();break;case "Help": help();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(0);
         final View[] selectedTab=new View[1];
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Rewards","Help"}) {
+        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
             nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
@@ -519,7 +516,6 @@ public final class MainActivity extends Activity {
         },false);
     }
     private void switchProfile() {
-        rewardPoints=-1;rewardsRequested=false;rewardAccount=null;dailyClaimed=false;
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
     }
 
@@ -540,7 +536,7 @@ public final class MainActivity extends Activity {
         title("How to use MoneyMate NZ");
         line("MoneyMate NZ helps you track income, expenses, budgets, savings goals and bills. It does not move money or pay bills. Use the navigation tabs at the bottom to open each section.");
         title("1. Sign in or use a local profile");
-        line("Open Account to sign in using Google (when available) or email, or continue without signing in. To share your points or enable private cloud sync across devices, use the same account on Android and the website.");
+        line("Open Account to sign in using Google (when available) or email, or continue without signing in. To enable private cloud sync across devices, use the same account on Android and the website.");
         title("2. Add income or expenses");
         line("Home or Transactions → + Income / + Expense. Choose a category, enter the amount in NZD, and save the entry. Home displays monthly income, spending and balance.");
         title("3. Import a bank CSV or PDF for free");
@@ -548,82 +544,17 @@ public final class MainActivity extends Activity {
         line("Only NZD files are supported; AUD is blocked. PDF recognition can fail on scanned or complex layouts and must be checked against the original. Save a JSON backup before a large import. Duplicate detection is best-effort.");
         title("4. Plan with budgets and goals");
         line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
-        title("5. Earn your free daily points");
-        line("Sign in and open Rewards. Tap Claim 10 points once per UTC day. Points share with your account, but they have no cash value and cannot be redeemed, transferred or withdrawn.");
-        title("6. Sync Android with the website");
+        title("5. Sync Android with the website");
         line("First save a JSON backup separately on BOTH devices in Export. Then use the same signed-in account on each. On the first device tap Account → Enable secure cloud sync; wait for confirmation. On the second device also enable sync. Sync happens while online and when edits are saved. If there is a conflict, export both copies first and do not replace data blindly.");
-        title("7. Back up and restore safely");
+        title("6. Back up and restore safely");
         line("Export → Backup all data (JSON) preserves your current profile. Export CSV saves transaction rows for spreadsheets. Restore full backup (JSON) REPLACES existing profile records; bank CSV import only ADDS new transactions.");
-        title("8. Help and privacy");
+        title("7. Help and privacy");
         line("Automatic live bank connections are not yet available. For login or syncing problems, retry online and check the same account on both devices. Never share a bank password, account token, or financial export publicly.");
         content.addView(button("Open full help guide on website",()->startActivity(new Intent(
             Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/help.html")))));
         content.addView(button("Read privacy policy",()->startActivity(new Intent(
             Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/privacy.html")))));
     }
-    private void rewards(){
-        title("MoneyMate Points");
-        line("Collect 10 free points for one daily check-in (UTC). No spending or bank connection required. Points are not money and cannot be redeemed, withdrawn or transferred.");
-        final String id=auth.userId();
-        if(id==null){line("Sign in with Google or email to collect points.");content.addView(button("Open Account",()->show("Account")));return;}
-        if(!id.equals(rewardAccount)){rewardAccount=id;rewardPoints=-1;rewardsRequested=false;dailyClaimed=false;}
-        if(rewardPoints<0){
-            line(rewardsBusy?"Fetching your points balance…":"Points have not been loaded or the service is unavailable.");
-            content.addView(button("Refresh points",()->loadRewards(true)));
-            if(!rewardsRequested&&!rewardsBusy)loadRewards(false);
-            return;
-        }
-        line("Your points: "+rewardPoints);
-        line(dailyClaimed?"Today's points are collected; return after the next UTC date begins.":"Your daily 10 points are ready.");
-        if(!dailyClaimed)content.addView(button("Claim 10 points",()->claimRewards()));
-        content.addView(button("Refresh points",()->loadRewards(true)));
-    }
-    private void loadRewards(boolean notify){
-        final String id=auth.userId();if(id==null||rewardsBusy)return;
-        rewardsRequested=true;rewardsBusy=true;
-        accountWorker.execute(()->{
-            org.json.JSONObject answer=null;String issue=null;
-            try{answer=auth.pointsStatus();}catch(Exception ex){issue="Points service unavailable. Please retry later.";}
-            final org.json.JSONObject result=answer;final String failure=issue;
-            runOnUiThread(()->{
-                try{
-                    if(isFinishing()||isDestroyed()||!id.equals(auth.userId()))return;
-                    if(failure!=null){if(notify)message(failure);return;}
-                    if(result==null||result.optLong("points",-1)<0||result.optInt("daily_points")!=10)throw new IllegalStateException("Invalid points response");
-                    rewardAccount=id;rewardPoints=result.getLong("points");dailyClaimed=result.getBoolean("daily_claimed");
-                }catch(Exception ex){if(notify)message("Could not check your points.");}
-                finally{
-                    rewardsBusy=false;
-                    if(!isFinishing()&&!isDestroyed()&&id.equals(auth.userId())&&currentPage.equals("Rewards"))show("Rewards");
-                }
-            });
-        });
-    }
-    private void claimRewards(){
-        final String id=auth.userId();if(id==null||rewardsBusy)return;
-        rewardsBusy=true;
-        accountWorker.execute(()->{
-            org.json.JSONObject answer=null;String issue=null;
-            try{answer=auth.claimDailyPoints();}catch(Exception ex){issue="Could not claim points. Try again later.";}
-            final org.json.JSONObject result=answer;final String failure=issue;
-            runOnUiThread(()->{
-                try{
-                    if(isFinishing()||isDestroyed()||!id.equals(auth.userId()))return;
-                    if(failure!=null){message(failure);return;}
-                    int granted=result.getInt("awarded");
-                    if(result.optLong("points",-1)<0||(granted!=0&&granted!=10)||!result.getBoolean("daily_claimed"))
-                        throw new IllegalStateException("Invalid claim response");
-                    rewardAccount=id;rewardPoints=result.getLong("points");dailyClaimed=true;
-                    message(granted==10?"You earned 10 points!":"Today's points were already collected.");
-                }catch(Exception ex){message("Could not verify points balance.");}
-                finally{
-                    rewardsBusy=false;
-                    if(!isFinishing()&&!isDestroyed()&&id.equals(auth.userId())&&currentPage.equals("Rewards"))show("Rewards");
-                }
-            });
-        });
-    }
-
     private void account() {
         title("Your MoneyMate account");
         line("Your records stay local unless you opt into secure Supabase cloud sync. When enabled, Android and the website can share records under the same verified account. Changes on two devices at once can cause a safe sync conflict.");

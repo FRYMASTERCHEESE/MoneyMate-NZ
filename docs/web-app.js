@@ -11,13 +11,12 @@ const today=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+
 const clockMonth=()=>today().slice(0,7);
 const prettyDate=s=>new Date(s+"T12:00:00").toLocaleDateString("en-NZ",{day:"numeric",month:"short",year:"numeric"});
 const amounts=["#06785b","#e4ac54","#5a9ed8","#ac89e5","#eb8769","#73c7be","#8aa56c"];
-const pages=["home","transactions","budgets","goals","bills","export","account","banking","rewards","admin"];
-const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals:"Savings goals",bills:"Bills",export:"Export & backup",account:"Account",banking:"Bank connections",rewards:"Rewards",admin:"Admin dashboard"}[p]||"Home");
+const pages=["home","transactions","budgets","goals","bills","export","account","banking","admin"];
+const label=p=>({home:"Home",transactions:"Transactions",budgets:"Budgets",goals:"Savings goals",bills:"Bills",export:"Export & backup",account:"Account",banking:"Bank connections",admin:"Admin dashboard"}[p]||"Home");
 let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth=null,config=null,busy=false,searchTerm="";
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
 let refreshInFlight=null;
-let pointsStatus=null,pointsBusy=false;
 let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 let profileEpoch=0;
 let financialSaving=false;
@@ -64,7 +63,7 @@ async function save(next){
 async function switchOwner(id){
  const epoch=++profileEpoch,owner=id||"guest";
  editor.close();
- profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;pointsStatus=null;
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
  const stored=await dbRead(owner);
  if(profileEpoch!==epoch)return;
  const result=recordDue(stored,today());
@@ -170,7 +169,7 @@ function accountPage(){
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
    html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
-    +'<div class="notice">'+escape(cloudStatus)+'</div><div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))+(cloudStatus.toLowerCase().includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")+(localEmpty(data)?btn("Copy guest records","import-guest","secondary"):"")+btn("Points","go-rewards","secondary")+btn("Bank connections","go-banking","secondary")+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
+    +'<div class="notice">'+escape(cloudStatus)+'</div><div class="btns">'+(cloudMeta?.enabled?btn("Sync now","cloud-sync","secondary"):btn("Enable secure cloud sync","cloud-enable","primary"))+(cloudStatus.toLowerCase().includes("conflict")?btn("Use cloud copy after backup","cloud-download","ghost"):"")+(localEmpty(data)?btn("Copy guest records","import-guest","secondary"):"")+btn("Bank connections","go-banking","secondary")+(adminOverview?btn("✦ Open Admin dashboard","go-admin","primary"):"")+btn("Sign out","signout","secondary")+btn("Delete account","delete-account","danger")+'</div></div>';
  }else{
    html+='<div class="account-grid"><section class="panel"><h2>Sign in</h2><form id="signin-form">'
     +formField("email","Email address","email","email",true,'autocomplete="username"')
@@ -191,15 +190,7 @@ function accountPage(){
 }
 
 
-function rewardsPage(){
- let html=heading("MoneyMate Points","Small rewards for building good budgeting habits.");
- html+='<div class="notice">Earn 10 points with one daily check-in (UTC). Points are free, not cash, not transferable and cannot be redeemed. No spending or bank connection is required.</div>';
- if(!auth)return html+'<section class="panel"><h2>Sign in to earn points</h2><p class="muted">Your rewards balance follows the same account on Android and the website.</p>'+btn("Go to Account","go-account")+'</section>';
- if(!pointsStatus)return html+'<section class="panel"><h2>Your points</h2><p class="muted">Loading your secure points balance…</p>'+btn("Refresh","points-refresh","secondary")+'</section>';
- const total=Number.isSafeInteger(pointsStatus.points)&&pointsStatus.points>=0?pointsStatus.points.toLocaleString("en-NZ"):"—";
- html+='<section class="panel"><p class="eyebrow">YOUR POINTS</p><h2 class="points-total">'+escape(total)+'</h2><p class="muted">'+(pointsStatus.daily_claimed?"Today’s check-in is complete. Return after the next UTC day begins.":"Your 10-point daily check-in is available.")+'</p><div class="btns">'+(!pointsStatus.daily_claimed?btn("Claim 10 points","points-claim"):"")+btn("Refresh points","points-refresh","secondary")+'</div></section>';
- return html+'<section class="panel"><h2>Fair rewards</h2><p class="muted">One 10-point claim per authenticated account per UTC day, protected by the server. These points have no monetary value or redemption entitlement.</p></section>';
-}
+
 function bankingPage(){
  return heading("Bank connections","Import NZD bank statements free, or check future NZ and Australian automatic bank connections.")
   +'<section class="panel"><h2>Free NZD statement imports · CSV or PDF</h2><p>Choose a bank CSV or text-based PDF statement downloaded from your bank. Neither needs a bank connection or paid provider. PDF extraction happens in your browser; PDF.js code downloads when you use it, and the file is never uploaded to a PDF service.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Choose bank PDF file","bank-pdf","secondary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
@@ -208,33 +199,6 @@ function bankingPage(){
  +'<div class="grid-2"><section class="panel"><h2>🇳🇿 New Zealand</h2><p>Planned: Akahu official open-banking connection, depending on bank availability.</p><span class="tag">Provider approval required</span><p><a href="https://www.akahu.nz/" target="_blank" rel="noopener noreferrer">About Akahu ↗</a></p></section>'
  +'<section class="panel"><h2>🇦🇺 Australia</h2><p>Planned: Basiq Consumer Data Right account connection with bank-approved consent.</p><span class="tag">Provider approval required</span><p><a href="https://www.basiq.io/" target="_blank" rel="noopener noreferrer">About Basiq ↗</a></p></section></div>'
  +'<section class="panel"><h2>How connections will work</h2><p class="muted">You will choose a participating bank, approve read-only access with the bank or accredited provider, and allow imported transactions into your profile. You will be able to disconnect. Import deduplication and separate NZD/AUD currency handling must pass testing first. Do not enter banking credentials on this website.</p></section>';
-}
-async function refreshPoints(showMessage=false){
- const owner=auth?.user?.id;
- if(!owner||pointsBusy)return;
- pointsBusy=true;
- try{
-  const response=await authApi("/rest/v1/rpc/moneymate_points_status","POST",{},await accessToken());
-  if(owner!==auth?.user?.id)return;
-  if(!Number.isSafeInteger(response.points)||response.points<0||typeof response.daily_claimed!=="boolean"||response.daily_points!==10)
-   throw Error("Invalid points response");
-  pointsStatus=response;render();
- }catch(error){if(showMessage)errorMessage(error);}
- finally{pointsBusy=false;}
-}
-async function claimPoints(){
- const owner=auth?.user?.id;if(!owner||pointsBusy)return;
- await withBusy(async()=>{
-  pointsBusy=true;
-  try{
-   const result=await authApi("/rest/v1/rpc/moneymate_claim_daily_points","POST",{},await accessToken());
-   if(owner!==auth?.user?.id)return;
-   if(!Number.isSafeInteger(result.points)||result.points<0||![0,10].includes(result.awarded)||result.daily_claimed!==true)
-    throw Error("Invalid points response");
-   pointsStatus={...result,daily_points:10};
-   render();toast(result.awarded===10?"You earned 10 points!":"You already collected today's points.");
-  }finally{pointsBusy=false;}
- });
 }
 
 function adminPage(){
@@ -272,7 +236,7 @@ function render(){
  $("#profile-pill").textContent=auth?auth.user.email:"Local profile";
  $("#date-heading").textContent="Your money. Your plan.";
  for(const button of document.querySelectorAll("[data-page]"))button.setAttribute("aria-current",button.dataset.page===page?"page":"false");
- const body={home,transactions,budgets,goals,bills,export:exportPage,account:accountPage,banking:bankingPage,rewards:rewardsPage,admin:adminPage}[page]||home;
+ const body={home,transactions,budgets,goals,bills,export:exportPage,account:accountPage,banking:bankingPage,admin:adminPage}[page]||home;
  view.innerHTML=body();
  if(page==="transactions"){
    renderRecords();
@@ -282,7 +246,6 @@ function render(){
 }
 function navigate(next){
  if(!pages.includes(next))next="home";
- if(next==="rewards"&&auth&&!pointsStatus)void refreshPoints(false);
  if(next==="admin"&&!(auth&&adminOverview))next="account";
  page=next;location.hash=next;render();window.scrollTo(0,0);
 }
@@ -522,10 +485,7 @@ async function settingsAction(action){
   case "admin-refresh":await refreshAdminOverview(false);break;
   case "google-login":await signInWithGoogle();break;
   case "go-account":navigate("account");break;
-  case "go-rewards":navigate("rewards");void refreshPoints(false);break;
   case "go-banking":navigate("banking");break;
-  case "points-refresh":await refreshPoints(true);break;
-  case "points-claim":await claimPoints();break;
   case "cloud-enable":await enableCloud();break;
   case "cloud-sync":await syncCloud(true);break;
   case "cloud-download":await chooseCloudCopy();break;
@@ -578,7 +538,6 @@ async function attachSession(result,{persist=true,checkAdmin=true}={}){
  auth=next;adminOverview=null;
  await switchOwner(next.user.id);
  await cloudOnSignin();
- void refreshPoints(false);
  if(checkAdmin)await refreshAdminOverview(true);
  toast("Signed in. Your private account records are available.");
 }
@@ -685,7 +644,7 @@ async function signout(){
   catch{toast("Signed out locally. Remote sessions might still be active.");}
   finally{
    await clearLoginSession().catch(()=>toast("Could not clear saved login. Clear site data on shared devices."));
-   adminOverview=null;auth=null;pointsStatus=null;await switchOwner("guest");navigate("account");
+   adminOverview=null;auth=null;await switchOwner("guest");navigate("account");
   }
  });
 }
@@ -699,7 +658,7 @@ async function deleteAccount(){
   const id=auth.user.id;
   await authApi("/functions/v1/delete-account","POST",{password},await accessToken());
   await clearLoginSession().catch(()=>{});
-   await dbErase(id);await dbSyncMeta(id,null);adminOverview=null;auth=null;cloudMeta=null;pointsStatus=null;
+   await dbErase(id);await dbSyncMeta(id,null);adminOverview=null;auth=null;cloudMeta=null;
   await switchOwner("guest");navigate("account");
   toast("Account deleted. Browser records for this account have also been removed.");
  });

@@ -59,4 +59,3 @@ h2{letter-spacing:-.6px;margin:0 0 16px;font-size:23px}h3{margin:0 0 6px;font-si
 .admin-links{display:flex;flex-direction:column;align-items:flex-start;gap:10px}
 .admin-links a{font-weight:700}
 
-.points-total{font-size:clamp(40px,6vw,68px);line-height:1.1;color:#06785b;margin:12px 0 16px}

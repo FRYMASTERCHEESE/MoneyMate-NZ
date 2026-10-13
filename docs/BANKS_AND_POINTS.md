@@ -1,10 +1,7 @@
-# MoneyMate NZ: Bank integration roadmap and in-app points
+# MoneyMate NZ: Bank integration roadmap and retired points
 
-## MoneyMate Points (implemented)
-- Sign in with Google or email and open **Rewards / Points** on the website or Android app.
-- Tap **Claim 10 points** once per UTC calendar day. The server derives the date, checks the authenticated account ID, inserts a unique daily claim and adds 10 points atomically. Repeats return 0.
-- The same account ID yields the same points balance on Android and web. Anonymous users cannot call the rewards RPC. Clients cannot insert or edit balances directly.
-- Points are free participation markers. They are not cash, gambling, gift cards, transferable credit or redeemable rewards. There is no money reward or future cash promise. No bank account connection, payment, transaction spending, account balance, or income level is required to claim.
+## MoneyMate Points (retired)
+Both client versions no longer offer point claims or points pages. Historic point data remains. Apply the separate `20261013_retire_moneymate_points.sql` migration only after updated clients have rolled out to disable old reward RPCs without deleting prior records.
 
 ## PDF bank statements (new, reviewed feature candidate)
 
@@ -43,4 +40,4 @@ Bank integration release gates:
 Existing optional account financial syncing is separate from open-banking consent. Bank connection must never be enabled automatically just because a user signs into MoneyMate NZ.
 
 ## Publish/test
-The new source is under `docs/web-app.js` and `app/src/main/java/nz/moneymate/app/`. The matching SQL is `supabase/migrations/20261013_moneymate_daily_points.sql`, applied to the dedicated MoneyMate NZ project. Check GitHub Actions CI, then test a real daily points claim on a signed-in user and refresh the balance on another device.
+The new source is under `docs/web-app.js` and `app/src/main/java/nz/moneymate/app/`. The historical points SQL remains for safe retention. Check CI and verify no points tabs appear in either client. Do not delete old Supabase data.
