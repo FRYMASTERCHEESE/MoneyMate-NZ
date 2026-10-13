@@ -27,7 +27,7 @@ The free app is supported by advertising provided through Google AdMob, subject 
 - Repeating income and expenses
 - Spending category bars
 - CSV export and JSON backup/restore
-- Free manual CSV and experimental PDF bank statement import (NZD only)\n- Optional secure signed-in sync and non-cash daily check-in points\n- No account required for offline manual budgeting
+- Free manual CSV and experimental PDF bank statement import (NZD only)\n- Optional secure signed-in sync\n- No account required for offline manual budgeting
 
 **Privacy:** MoneyMate NZ does not require your banking credentials and does not connect to your bank automatically. If you enable optional cloud sync, your financial records are uploaded to the account service in Sydney, Australia. Google authentication and advertising services may process account, device and advertising-related data. Review our privacy policy for details.
 
@@ -44,6 +44,6 @@ The free app is supported by advertising provided through Google AdMob, subject 
 
 ## Claims to avoid until independently verified
 
-- Do **not** claim real NZ/AU automatic bank connections, payment processing, AUD budgeting, cash-redeemable points or certification for all NZ bank PDFs.
+- Do **not** claim real NZ/AU automatic bank connections, payment processing, AUD budgeting, certification for all NZ bank PDFs.
 - Do **not** claim 100% flawless syncing without separate-account and same-account live Android/browser tests.
 - Do **not** claim a signed production bundle is available until protected signing and verification actually succeed.

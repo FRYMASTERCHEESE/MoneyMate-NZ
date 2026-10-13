@@ -8,9 +8,9 @@ test("published and root website help pages match exactly",()=>{
 });
 test("user guide includes all essential website and Android workflows",()=>{
   const help=source("docs/help.html");
-  for(const section of ["id=\"start\"","id=\"transactions\"","id=\"bank-csv\"","id=\"budgets\"","id=\"points\"","id=\"sync\"","id=\"backup\"","id=\"faq\""])
+  for(const section of ["id=\"start\"","id=\"transactions\"","id=\"bank-csv\"","id=\"budgets\"","id=\"sync\"","id=\"backup\"","id=\"faq\""])
     assert.ok(help.includes(section),section);
-  for(const label of ["Enable secure cloud sync","Save full","NZD","AUD","Claim 10 points","JSON backup","CSV","same account","Android"])
+  for(const label of ["Enable secure cloud sync","Save full","NZD","AUD","JSON backup","CSV","same account","Android"])
     assert.ok(help.toLowerCase().includes(label.toLowerCase()),label);
   assert.ok(!help.includes("do <strong>not</strong> automatically synchronize financial records"));
   assert.ok(help.includes("Restoring JSON replaces"));
