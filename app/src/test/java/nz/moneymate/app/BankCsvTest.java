@@ -5,6 +5,19 @@ import java.util.List;
 import static org.junit.Assert.*;
 
 public class BankCsvTest {
+    @Test public void recategorizingBankRowKeepsDuplicateIdentity(){
+        BankCsv.Entry row=BankCsv.parse("Date,Amount,Description\n2026-10-12,-5,Cafe\n","Daily").get(0);
+        assertEquals(row.key(),new BankCsv.Entry(row.date,row.kind,"Entertainment",row.note,row.cents).key());
+    }
+    @Test public void exportedBlankNotesAndSourceNotesSurviveReimport(){
+        BankCsv.Entry row=BankCsv.parse("Date,Type,Category,Note,Amount NZD\n2026-10-12,Expense,Housing,,560.00\n","Daily").get(0);
+        assertEquals("",row.note);assertEquals(56000,row.cents);
+        row=BankCsv.parse("Date,Type,Category,Note,Amount NZD\n2026-10-12,Expense,Other,Bank CSV (Daily): Cafe,5.00\n","Daily").get(0);
+        assertEquals("Bank CSV (Daily): Cafe",row.note);
+    }
+    @Test(expected=IllegalArgumentException.class) public void unknownDirectionFailsClosed(){
+        BankCsv.parse("Date,Amount,Description,Type\n2026-10-12,50,Cafe,unknown\n","Daily");
+    }
     @Test public void signedNzdAndMerchantCategory(){
         List<BankCsv.Entry> rows=BankCsv.parse("Date,Amount,Description,Currency\r\n12/10/2026,-50.25,\"PAK'nSAVE, Matamata\",NZD\r\n13/10/2026,300.10,Salary,NZD\r\n","Everyday");
         assertEquals(2,rows.size());

@@ -24,6 +24,7 @@ jobs:
         with:
           node-version: '24'
       - run: node --check docs/web-app.js
+      - run: npm ci --ignore-scripts
       - run: node --check docs/web-core.mjs
       - run: node --test tests/*.test.mjs
       - name: Check publishable website files

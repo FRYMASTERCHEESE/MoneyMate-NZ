@@ -11,6 +11,25 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class AccountTest {
+    @Test public void malformedBackupNeverReplacesExistingRecords() throws Exception {
+        Context c=context();String owner="33333333-3333-4333-8333-333333333333";
+        c.deleteDatabase(Store.databaseName(owner));
+        try(Store s=new Store(c,owner)){
+            s.addTransaction("Income","Wages","Synthetic",1234,"2026-10-13");
+            String baseline=s.backupJson();
+            for(Object bad:new Object[]{1.5,"1234",-1,9_007_199_254_740_992L}){
+                JSONObject copy=new JSONObject(baseline);copy.getJSONArray("transactions").getJSONObject(0).put("cents",bad);
+                try{s.restoreJson(copy.toString());fail("Invalid amount accepted");}catch(org.json.JSONException expected){}
+                assertEquals(baseline,s.backupJson());
+            }
+            JSONObject copy=new JSONObject(baseline);copy.getJSONArray("transactions").getJSONObject(0).remove("id");
+            try{s.restoreJson(copy.toString());fail("Missing ID accepted");}catch(org.json.JSONException expected){}
+            assertEquals(baseline,s.backupJson());
+            String csv=String.join("\n",s.csvRows());
+            assertEquals(1,s.importBankCsv(BankCsv.parse(csv,"Daily"),false).skipped);
+            assertEquals(baseline,s.backupJson());
+        }finally{c.deleteDatabase(Store.databaseName(owner));}
+    }
     private static final String A="11111111-1111-4111-8111-111111111111",B="22222222-2222-4222-8222-222222222222";
     private Context context(){return InstrumentationRegistry.getInstrumentation().getTargetContext();}
     @Test public void preservesVersionOneAndSeparatesAccountsAndBackups() throws Exception {

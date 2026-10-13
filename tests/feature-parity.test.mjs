@@ -35,7 +35,7 @@ test("cloud changes cover matching financial record types and privacy safeguards
   assert.ok(web.includes(column),column+" missing from website");
   assert.ok(android.includes(column)||backup.includes(column),column+" missing from Android");
  }
- assert.match(web,/before-cloud-/);
+ assert.match(read("docs/profile-store.mjs"),/before-cloud-/);
  assert.match(android,/financial-recovery/);
  assert.match(activity,/CloudSync.recoveryCopy/);
  assert.match(read("docs/privacy.html"),/Optional account syncing/);
@@ -43,6 +43,7 @@ test("cloud changes cover matching financial record types and privacy safeguards
 test("web and root publishing copies match and website retains existing profiles",()=>{
  assert.equal(web,read("web-app.js"));
  assert.equal(read("docs/sync-policy.mjs"),read("sync-policy.mjs"));
+ assert.equal(read("docs/profile-store.mjs"),read("profile-store.mjs"));
  assert.match(web,/indexedDB.open\("MoneyMateNZWeb",2\)/);
  assert.match(web,/if\(!req.result.objectStoreNames.contains\("profiles"\)\)/);
 });
