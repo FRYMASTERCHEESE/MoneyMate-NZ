@@ -175,7 +175,7 @@ function accountPage(){
     +formField("email","Email address","email","email",true,'autocomplete="username"')
     +formField("password","Password","password","password",true,'autocomplete="current-password"')
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Sign in</button></form>'
-    +'<div class="btns">'+btn("Forgot password","recover","ghost")+(config?.googleEnabled?btn("Continue with Google","google-login","secondary"):"")+'</div></section>'
+    +'<div id="moneymate-google-direct" style="margin-top:12px"></div><div class="btns">'+btn("Forgot password","recover","ghost")+(config?.googleEnabled?btn("Google sign-in via browser (backup)","google-login","secondary"):"")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
     +formField("new-password","Password (8–128 characters)","password","password",true,'autocomplete="new-password" minlength="8" maxlength="128"')
@@ -621,7 +621,36 @@ async function refreshAdminOverview(silent=true){
  }
 }
 
+
+let googleIdScript=null,googleIdInitialised=false;
+function showDirectGoogleButton(){
+ const el=$("#moneymate-google-direct");
+ if(!el||auth||!config?.googleClientId)return;
+ if(!googleIdScript)googleIdScript=new Promise((resolve,reject)=>{
+  if(window.google?.accounts?.id){resolve(window.google.accounts.id);return;}
+  const script=document.createElement("script");
+  script.src="https://accounts.google.com/gsi/client";script.async=true;
+  script.onload=()=>window.google?.accounts?.id?resolve(window.google.accounts.id):reject(Error("Google sign-in unavailable"));
+  script.onerror=()=>reject(Error("Google sign-in unavailable"));
+  document.head.append(script);
+ });
+ googleIdScript.then(sdk=>{
+  if(!el.isConnected||auth||page!=="account")return;
+  if(!googleIdInitialised){
+   sdk.initialize({client_id:config.googleClientId,auto_select:false,callback:response=>{
+    if(!response||typeof response.credential!=="string"||auth)return;
+    void withBusy(async()=>{
+     const session=await authApi("/auth/v1/token?grant_type=id_token","POST",{provider:"google",id_token:response.credential});
+     await attachSession(session);navigate("account");
+    });
+   }});
+   googleIdInitialised=true;
+  }
+  sdk.renderButton(el,{type:"standard",theme:"outline",text:"continue_with",size:"large",width:260});
+ }).catch(()=>{if(el.isConnected)el.textContent="Google button unavailable. Use browser login below.";});
+}
 function attachAuthForms(){
+ showDirectGoogleButton();
  $("#signin-form")?.addEventListener("submit",e=>{e.preventDefault();withBusy(async()=>{
   const email=$("#email").value.trim(),password=$("#password").value;
   $("#password").value="";

@@ -1,5 +1,6 @@
 {
   "url": "https://efdegdlsrkxlnjgbxtep.supabase.co",
   "publishableKey": "sb_publishable_vQdWTtYUzSUwKjqz6Fmm8Q_YL7NU09M",
-  "googleEnabled": true
+  "googleEnabled": true,
+  "googleClientId": "353755907837-67mnn6nil8smrpsej8ms5pcvm0i71nm6.apps.googleusercontent.com"
 }
