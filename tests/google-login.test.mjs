@@ -38,3 +38,18 @@ test("direct Google sign-in exchanges ID token via Supabase and preserves PKCE f
  assert.equal(read("docs/sw.js"),read("sw.js"));
  assert.match(read("sw.js"),/v12-google-direct-signin/);
 });
+
+test("Android uses native Google picker with browser fallback and preserves Supabase session scheme",()=>{
+ const a=read("app/src/main/java/nz/moneymate/app/MainActivity.java");
+ const native=read("app/src/main/java/nz/moneymate/app/GoogleIdentity.java");
+ const auth=read("app/src/main/java/nz/moneymate/app/AuthClient.java");
+ const build=read("app/build.gradle");
+ assert.ok(a.includes("GoogleIdentity.start(this"));
+ assert.ok(a.includes("GoogleOAuth.start(this)"));
+ assert.ok(a.includes("exchangeGoogleIdToken(token)"));
+ assert.ok(auth.includes("/auth/v1/token?grant_type=id_token"));
+ assert.ok(native.includes("CredentialManager.create(activity).getCredentialAsync"));
+ assert.ok(native.includes("GoogleIdTokenCredential.createFrom"));
+ assert.ok(build.includes("GOOGLE_WEB_CLIENT_ID"));
+ assert.ok(build.includes("versionCode 11"));
+});

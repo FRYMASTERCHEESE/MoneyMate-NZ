@@ -5,7 +5,7 @@
 - Live web: https://frymastercheese.github.io/MoneyMate-NZ/
 - Public [step-by-step website and Android guide](https://frymastercheese.github.io/MoneyMate-NZ/help.html)
 - Source: `FRYMASTERCHEESE/MoneyMate-NZ`
-- Android application ID: `nz.moneymate.app`; next test version **0.3.6**, version code **10**.
+- Android application ID: `nz.moneymate.app`; next test version **0.3.7**, version code **11**.
 
 ## Implemented and automated-test coverage
 
@@ -45,3 +45,6 @@ Run `npm ci --ignore-scripts` first for the browser storage emulator used by reg
 ## Privacy
 
 Do not commit bank statement files, API credentials, login tokens, signing keys, private user exports or Supabase service-role keys. Public client configuration in `docs/account-config.json` is intentionally publishable only. See [privacy policy](https://frymastercheese.github.io/MoneyMate-NZ/privacy.html). MoneyMate NZ does not move money, make bank payments or provide financial advice.
+
+### Direct Google login candidate (Android 0.3.7 / website)
+Google's first-party Web Identity Services button and native Android Credential Manager can sign users in via Google's ID token, which the existing Supabase Auth server verifies and exchanges for the same normal account session. The working Google browser PKCE path and email login remain available as fallbacks. The public client ID is `353755907837-67mnn6nil8smrpsej8ms5pcvm0i71nm6.apps.googleusercontent.com`. Before rollout, check Google Cloud Web Authorized JavaScript origin `https://frymastercheese.github.io` and verify Android OAuth app package/Play signing SHA; test same-user IDs and existing sync on real accounts. No financial data migrations, logout resets, or credential changes.

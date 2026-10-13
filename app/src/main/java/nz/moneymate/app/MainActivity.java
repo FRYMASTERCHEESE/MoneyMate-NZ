@@ -566,10 +566,24 @@ public final class MainActivity extends Activity {
             line("Local profile • your existing records are preserved");
             if(!AuthClient.configured()){line("Accounts are not available in this build yet. Local budgeting and backups still work.");return;}
             content.addView(button("Sign in",()->credentialsForm(false)));
-            if(BuildConfig.GOOGLE_ENABLED)content.addView(button("Continue with Google",()->{
-                try{startActivity(GoogleOAuth.start(this));}
-                catch(Exception failure){message("Google sign-in is unavailable. Please use email sign-in.");}
-            }));
+            if(BuildConfig.GOOGLE_ENABLED) {
+                content.addView(button("Continue with Google",()->GoogleIdentity.start(this,
+                    new GoogleIdentity.Listener(){
+                        @Override public void onToken(String token){
+                            accountTask(()->auth.exchangeGoogleIdToken(token),()->{
+                                switchProfile();
+                                message("Google account connected. Existing records remain protected.");
+                            },false);
+                        }
+                        @Override public void onUnavailable(){
+                            message("Google picker unavailable. Use browser Google sign-in below.");
+                        }
+                    })));
+                content.addView(button("Google sign-in via browser (backup)",()->{
+                    try{startActivity(GoogleOAuth.start(this));}
+                    catch(Exception failure){message("Browser Google sign-in unavailable. Email sign-in still works.");}
+                }));
+            }
             content.addView(button("Create account",()->credentialsForm(true)));
             content.addView(button("Confirm email",()->emailCodeForm(false)));
             content.addView(button("Resend confirmation code",()->emailRequest(false)));
