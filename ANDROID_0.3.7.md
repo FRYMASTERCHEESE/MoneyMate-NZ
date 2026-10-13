@@ -19,6 +19,13 @@ JSON backup/restore. They reset synthetic databases: never run them on a persona
 device containing records. Real Google/email sign-in and multi-device live sync
 remain manual staging-account checks; fixtures do not certify every bank PDF or
 the complete document-picker/OCR flow.
+The additional generated PDF instrumentation fixture exercises bundled OCR,
+transaction import, duplicate detection, and JSON restore on both build variants.
+
+Full release lint currently reports 10 pre-existing errors (nine numeric layout
+orientation constants and Android 16 back-navigation handling) and 17 warnings.
+CI reports lint separately with `continue-on-error` so these existing findings do
+not prevent runtime verification. A green workflow does not mean lint is clean.
 
 With JDK 17, Gradle 8.13 and Android SDK 36 installed:
 

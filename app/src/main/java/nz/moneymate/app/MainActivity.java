@@ -53,7 +53,7 @@ public final class MainActivity extends Activity {
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
         store.postDueRecurring(); show("Home");
         handleGoogleCallback(getIntent());
-        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
+        if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
     private void applyTheme(ThemeConfig config) {
         ink=config.ink;green=config.accent;canvasColor=config.background;

@@ -81,4 +81,5 @@ jobs:
           path: |
             app/build/outputs/bundle/release/*.aab
             app/build/outputs/bundle/release/*.sha256
+            app/build/outputs/mapping/release/
           retention-days: 7
