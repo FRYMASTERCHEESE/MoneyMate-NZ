@@ -75,6 +75,13 @@ final class AuthClient {
         return transport.call("/rest/v1/rpc/commit_account_snapshot","POST",
             new JSONObject().put("p_expected_revision",expectedRevision).put("p_data",snapshot),accessToken());
     }
+    void exchangeGoogleIdToken(String idToken) throws Exception {
+        if(idToken==null||idToken.length()<100||idToken.length()>16384)
+            throw new IOException("Invalid Google ID token");
+        // Supabase verifies the signed Google token and its audience, then issues the existing session format.
+        save(transport.call("/auth/v1/token?grant_type=id_token","POST",
+            new JSONObject().put("provider","google").put("id_token",idToken),null));
+    }
     void exchangeGooglePkce(String code,String verifier) throws Exception {
         if(code==null||code.length()<8||verifier==null||verifier.length()<32)throw new IOException("Invalid Google authorization");
         save(transport.call("/auth/v1/token?grant_type=pkce","POST",

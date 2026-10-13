@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 10
-        versionName '0.3.6'
+        versionCode 11
+        versionName '0.3.7'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -38,6 +38,8 @@ android {
         buildConfigField 'String', 'SUPABASE_URL', '"' + authUrl + '"'
         buildConfigField 'String', 'SUPABASE_KEY', '"' + authKey + '"'
         buildConfigField 'boolean', 'GOOGLE_ENABLED', (publicConfig.googleEnabled == true ? 'true' : 'false')
+        def googleClientId = publicConfig.googleClientId ?: ''
+        buildConfigField 'String', 'GOOGLE_WEB_CLIENT_ID', '\"' + googleClientId + '\"'
         buildConfigField 'String', 'ADMOB_BANNER_ID', '"' + (productionRelease ? liveAdmobBanner : testAdmobBanner) + '"'
         manifestPlaceholders = [admobAppId: productionRelease ? liveAdmobApp : testAdmobApp]
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
@@ -77,6 +79,9 @@ android {
 dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1' // bundled, on-device Latin OCR; no per-bank fees
     implementation 'com.google.android.gms:play-services-ads:24.5.0'
+    implementation 'androidx.credentials:credentials:1.6.0'
+    implementation 'androidx.credentials:credentials-play-services-auth:1.6.0'
+    implementation 'com.google.android.libraries.identity.googleid:googleid:1.2.1'
     implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
     testImplementation 'junit:junit:4.13.2'
     androidTestImplementation 'androidx.test:runner:1.6.2'
