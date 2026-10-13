@@ -52,6 +52,8 @@ jobs:
       - name: Report existing release lint findings
         continue-on-error: true
         run: gradle --no-daemon :app:lintRelease
+      - name: Build optimised instrumentation APKs before starting emulator
+        run: gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:assembleR8Test :app:assembleR8TestAndroidTest
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -64,7 +66,7 @@ jobs:
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: Verify Android screens and capture screenshots
+      - name: Verify debug and optimised app on a fresh emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -72,19 +74,13 @@ jobs:
           profile: pixel_2
           disable-animations: true
           script: |
-            gradle --no-daemon :app:connectedDebugAndroidTest
+            mkdir -p screenshots
+            timeout 300 gradle --no-daemon :app:connectedDebugAndroidTest || { adb logcat -d > screenshots/debug-logcat.txt; exit 1; }
+            timeout 300 gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest || { adb logcat -d > screenshots/r8test-logcat.txt; exit 1; }
             mkdir -p screenshots
             adb pull /sdcard/Download/moneymate-screenshots/. screenshots/
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > screenshots/apk-certificate.txt
             grep -q '7bf330320f1084bed0f590db25269ad8559d3195a85ff3a1a4c442ed3d0f664c' screenshots/apk-certificate.txt
-      - name: Verify optimised app on an isolated emulator package
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 35
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest
       - name: Check release obfuscation evidence
         run: |
           test -s app/build/outputs/mapping/release/mapping.txt
