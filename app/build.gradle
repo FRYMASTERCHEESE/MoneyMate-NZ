@@ -76,6 +76,9 @@ android {
             applicationIdSuffix '.r8test'
             signingConfig signingConfigs.debug
             matchingFallbacks = ['release']
+            // AndroidJUnitRunner loads this shared app dependency by its original
+            // name; its separately packaged bytecode cannot follow app renaming.
+            proguardFiles 'proguard-instrumentation.pro'
         }
     }
     testBuildType providers.gradleProperty('moneymateTestBuildType').getOrElse('debug')
