@@ -1,0 +1,7 @@
+{
+  "name": "moneymate-nz-verification",
+  "private": true,
+  "type": "module",
+  "scripts": {"test": "node --test tests/*.test.mjs supabase/functions/delete-account/handler.test.mjs"},
+  "devDependencies": {"fake-indexeddb": "6.2.4"}
+}

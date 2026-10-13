@@ -1,6 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {parseCsv,planBankCsv} from '../bank-csv.mjs';
+import {csv as exportCsv,emptyData} from '../web-core.mjs';
+
+test('reviewed category changes do not duplicate imported bank rows',()=>{
+ const first=planBankCsv(csv,[],'Everyday').toAdd;
+ first[0].category='Other';
+ assert.equal(planBankCsv(csv,first,'Everyday').skipped,2);
+});
+test('MoneyMate CSV export reimport preserves notes and skips existing records including blank notes',()=>{
+ const d=emptyData();d.transactions=[{id:1,date:'2026-10-12',kind:'Expense',category:'Housing',note:'',cents:5000}];
+ assert.equal(planBankCsv(exportCsv(d),d.transactions).skipped,1);
+ const imported=planBankCsv(csv,[],'Everyday').toAdd.map((row,i)=>({...row,id:i+1}));
+ d.transactions=imported;
+ assert.equal(planBankCsv(exportCsv(d),imported).toAdd.length,0);
+});
+test('unknown transaction types fail without silently guessing income',()=>{
+ assert.throws(()=>planBankCsv('Date,Amount,Description,Type\n2026-10-12,50,Cafe,unknown\n'),/unrecognised/);
+});
 
 const csv=`Date,Amount,Description,Currency\r\n12/10/2026,-50.25,"PAK'nSAVE, Matamata",NZD\r\n13/10/2026,300.10,Salary,NZD\r\n`;
 test('quoted merchant, CRLF and precise NZD integer cents, with category suggestions',()=>{

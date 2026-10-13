@@ -19,7 +19,7 @@ public final class BankCsv {
         Entry(String date,String kind,String category,String note,long cents) {
             this.date=date;this.kind=kind;this.category=category;this.note=note;this.cents=cents;
         }
-        public String key(){return date+"\u0000"+kind+"\u0000"+category+"\u0000"+note+"\u0000"+cents;}
+        public String key(){return date+"\u0000"+kind+"\u0000"+(note.startsWith("Bank CSV (")?"":category)+"\u0000"+note+"\u0000"+cents;}
     }
     private static String norm(String s){return s.replace("\ufeff","").trim().toLowerCase(Locale.ROOT).replace('_',' ').replace('-',' ').replaceAll("\\s+"," ");}
     private static final String[][] COLUMNS={
@@ -130,6 +130,7 @@ public final class BankCsv {
         if(ix[2]>=0&&(ix[3]>=0||ix[4]>=0))throw new IllegalArgumentException("Ambiguous bank amount columns");
         for(String h:header)if(norm(h).matches(".*\\b(aud|australian dollars?)\\b.*"))
             throw new IllegalArgumentException("AUD CSV not supported by NZD budgets");
+        boolean ownExport=ix[1]<0&&ix[7]>=0&&ix[6]>=0&&ix[5]>=0&&ix[2]>=0&&norm(header.get(ix[2])).equals("amount nzd");
         List<Entry> result=new ArrayList<>();
         for(int i=1;i<rows.size();i++) {
             List<String> r=rows.get(i);
@@ -139,7 +140,7 @@ public final class BankCsv {
             if(!status.isEmpty()&&!status.matches("(?i)posted|completed|settled|cleared"))
                 throw new IllegalArgumentException("Row "+(i+1)+" is not settled");
             String desc=cell(r,ix[1]);if(desc.isEmpty())desc=cell(r,ix[7]);
-            if(desc.isEmpty())throw new IllegalArgumentException("Missing description in row "+(i+1));
+            if(desc.isEmpty()&&!ownExport)throw new IllegalArgumentException("Missing description in row "+(i+1));
             String kind;long value;
             if(ix[2]>=0){
                 Long amount=cents(cell(r,ix[2]));
@@ -147,6 +148,7 @@ public final class BankCsv {
                 String type=cell(r,ix[5]).toLowerCase(Locale.ROOT);
                 if(type.matches("expense|debit|withdrawal|out|payment"))kind="Expense";
                 else if(type.matches("income|credit|deposit|in"))kind="Income";
+                else if(!type.isEmpty())throw new IllegalArgumentException("Unrecognised transaction type in row "+(i+1));
                 else kind=amount<0?"Expense":"Income";
                 if(amount<0&&kind.equals("Income"))throw new IllegalArgumentException("Negative income amount");
                 value=Math.abs(amount);
@@ -156,7 +158,7 @@ public final class BankCsv {
                 kind=debit!=null&&debit!=0?"Expense":"Income";
                 value=Math.abs(kind.equals("Expense")?debit:credit);
             }
-            String note="Bank CSV ("+label+"): "+desc.substring(0,Math.min(1400,desc.length()));
+            String note=ownExport?cell(r,ix[7]):"Bank CSV ("+label+"): "+desc.substring(0,Math.min(1400,desc.length()));
             String category=cell(r,ix[6]);if(category.isEmpty())category=category(desc);
             if(category.length()>2000)throw new IllegalArgumentException("Category is too long");
             result.add(new Entry(date(cell(r,ix[0])),kind,category,note,value));

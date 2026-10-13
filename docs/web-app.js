@@ -3,6 +3,7 @@ import {pdfStatementToCsv,pdfFileToLines} from "./pdf-statement.mjs";
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 import {decideSync} from "./sync-policy.mjs";
+import {writeProfile} from "./profile-store.mjs";
 
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -18,6 +19,8 @@ let adminOverview=null;
 let refreshInFlight=null;
 let pointsStatus=null,pointsBusy=false;
 let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
+let profileEpoch=0;
+let financialSaving=false;
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
@@ -34,23 +37,39 @@ async function dbRead(id){
  try {const stored=await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readonly");const q=tx.objectStore("profiles").get(id);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error);});
  return stored?strictData(stored):emptyData();}finally{db.close();}
 }
-async function dbWrite(id,next){
- const safe=strictData(next),db=await dbOpen();
- try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").put(safe,id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}
+async function dbWrite(id,next,options){
+ const db=await dbOpen();
+ try{return await writeProfile(db,id,next,options);}
  finally{db.close();}
 }
 async function dbErase(id){
  const db=await dbOpen();try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
 async function save(next){
- const owner=profile;data=strictData(next);await dbWrite(owner,data);render();
+ if(financialSaving)throw Error("Please wait for the previous save to finish.");
+ const safe=strictData(next);
+ financialSaving=true;
+ const owner=profile,epoch=profileEpoch,previous=data;data=safe;
+ try{await dbWrite(owner,safe,{expected:previous,current:()=>profile===owner&&profileEpoch===epoch});}
+ catch(error){
+  const persisted=await dbRead(owner).catch(()=>previous);
+  if(profileEpoch===epoch&&data===safe)data=persisted;
+  render();throw error;
+ }
+ finally{financialSaving=false;}
+ if(profileEpoch!==epoch)return;
+ render();
  if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
 }
 async function switchOwner(id){
+ const epoch=++profileEpoch,owner=id||"guest";
+ editor.close();
  profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;pointsStatus=null;
- data=await dbRead(profile);
- const result=recordDue(data,today());
- if(result.created)await dbWrite(profile,result.data);
+ const stored=await dbRead(owner);
+ if(profileEpoch!==epoch)return;
+ const result=recordDue(stored,today());
+ if(result.created)await dbWrite(owner,result.data,{expected:stored,current:()=>profileEpoch===epoch});
+ if(profileEpoch!==epoch)return;
  data=result.data;searchTerm="";selectedMonth=clockMonth();page="home";render();
 }
 function empty(icon,heading,detail){
@@ -323,6 +342,7 @@ async function submitModal(event){
  event.preventDefault();
  if(busy)return;
  const f=new FormData($("#editor-form")),v=key=>String(f.get(key)||"").trim();
+ busy=true;
  try {
   const next=structuredClone(data);
   const amount=["income","expense","recurring","budget","edit-budget","goal","contribute","bill"].includes(modalKind)?cents(v("amount")):0;
@@ -354,6 +374,7 @@ async function submitModal(event){
   }
   await save(next);editor.close();toast("Saved to this device.");
  }catch(error){errorMessage(error);}
+ finally{busy=false;}
 }
 async function mutate(action,id){
  const next=structuredClone(data);
@@ -474,11 +495,13 @@ async function importBankCsvFile(file){
 }
 async function importFile(file){
  if(!file)return;
+ const owner=profile,epoch=profileEpoch,baseline=JSON.stringify(data);
  try{
   if(file.size>20000000)throw Error("Backup exceeds 20 MB.");
   const backup=strictData(JSON.parse(await file.text()));
   const question="Replace ALL local transactions, budgets, goals, bills and repeating schedules for this profile? This cannot be undone. Save your existing JSON backup first.";
   if(!window.confirm(question))return;
+  if(profile!==owner||profileEpoch!==epoch||JSON.stringify(data)!==baseline)throw Error("Account or records changed while reading this backup. Nothing was restored.");
   await save(backup);toast("Full backup restored successfully.");
  }catch(error){errorMessage(error);}
  finally{$("#import-file").value="";}
@@ -776,8 +799,9 @@ async function dbSyncMeta(id,write) {
   return await new Promise((resolve,reject)=>{
    const tx=db.transaction("sync",write===undefined?"readonly":"readwrite"),store=tx.objectStore("sync");
    const req=write===undefined?store.get(id):write===null?store.delete(id):store.put(write,id);
-   req.onsuccess=()=>resolve(write===undefined?req.result:write);
-   req.onerror=()=>reject(req.error);
+   tx.oncomplete=()=>resolve(write===undefined?req.result:write);
+   tx.onerror=()=>reject(tx.error);
+   tx.onabort=()=>reject(tx.error||Error("Sync metadata save interrupted."));
   });
  }finally{db.close();}
 }
@@ -788,22 +812,28 @@ async function signature(backup){
  return Array.from(digest,b=>b.toString(16).padStart(2,"0")).join("");
 }
 async function cloudRead() {
- const result=await authApi("/rest/v1/rpc/read_account_snapshot","POST",{},await accessToken());
+ const owner=auth?.user?.id,token=await accessToken();
+ if(!owner||auth?.user?.id!==owner)throw Error("Account changed during cloud check.");
+ const result=await authApi("/rest/v1/rpc/read_account_snapshot","POST",{},token);
  if(!Number.isSafeInteger(result.revision)||result.revision<0)throw Error("Cloud replied with an invalid revision.");
  if(result.revision>0)strictData(result.data);
  return result;
 }
-async function cloudCommit(revision,backup) {
+async function cloudCommit(revision,backup,owner=auth?.user?.id) {
+ const token=await accessToken();
+ if(!owner||auth?.user?.id!==owner)throw Error("Account changed during cloud save.");
  const result=await authApi("/rest/v1/rpc/commit_account_snapshot","POST",{
   p_expected_revision:revision,p_data:strictData(backup)
- },await accessToken());
+ },token);
  if(typeof result.success!=="boolean"||!Number.isSafeInteger(result.revision))throw Error("Cloud save returned an invalid reply.");
  return result;
 }
 async function cloudOnSignin() {
- const owner=auth?.user?.id;
+ const owner=auth?.user?.id,epoch=profileEpoch;
  if(!owner)return;
- cloudMeta=await dbSyncMeta(owner)||null;
+ const metadata=await dbSyncMeta(owner)||null;
+ if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+ cloudMeta=metadata;
  if(cloudMeta?.enabled){await syncCloud(false);return;}
  try {
   const remote=await cloudRead();
@@ -822,38 +852,45 @@ async function enableCloud() {
  if(cloudBusy)return;
  cloudBusy=true;
  try{
-  const owner=auth.user.id,remote=await cloudRead();
-  if(auth?.user?.id!==owner||profile!==owner)return;
-  const localHash=await signature(data);
+ const owner=auth.user.id,epoch=profileEpoch,baseline=strictData(data),remote=await cloudRead();
+  if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+  const localHash=await signature(baseline);
+  if(profileEpoch!==epoch||await signature(data)!==localHash)throw Error("Records changed while enabling sync. Please retry.");
   if(remote.revision>0){
    const remoteData=strictData(remote.data);
    if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
-    await dbWrite(owner,remoteData);data=remoteData;
-    cloudMeta={enabled:true,revision:remote.revision,digest:await signature(data)};
+    const metadata={enabled:true,revision:remote.revision,digest:await signature(remoteData)};
+    await dbWrite(owner,remoteData,{expected:baseline,recovery:true,metadata,current:()=>profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
+    if(profileEpoch!==epoch)return;
+    data=remoteData;cloudMeta=metadata;
     cloudStatus="Cloud records restored. Automatic sync is active.";
    }else{
     cloudStatus="Sync conflict: this browser and cloud both have different records. Export local JSON first; nothing was overwritten.";
     toast(cloudStatus);render();return;
    }
   }else{
-   const result=await cloudCommit(0,data);
+   const result=await cloudCommit(0,baseline,owner);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
    if(!result.success){cloudStatus="Another device created a cloud copy. Nothing was overwritten.";render();return;}
    cloudMeta={enabled:true,revision:result.revision,digest:localHash};
    cloudStatus="Cloud sync enabled. Your records are now backed up online.";
+   if(await signature(data)!==localHash)cloudPending=true;
   }
   await dbSyncMeta(owner,cloudMeta);render();toast(cloudStatus);
  }catch(error){cloudStatus="Could not enable cloud sync. Your existing local records remain safe.";errorMessage(error);render();}
- finally{cloudBusy=false;}
+ finally{cloudBusy=false;if(cloudPending){cloudPending=false;void syncCloud(false);}}
 }
 async function syncCloud(showStatus=false) {
  if(!auth||!cloudMeta?.enabled)return;
- if(cloudBusy){cloudPending=true;return;}
+ if(cloudBusy||financialSaving){cloudPending=true;return;}
  cloudBusy=true;
- const owner=auth.user.id;
+ const owner=auth.user.id,epoch=profileEpoch;
  try{
   const remote=await cloudRead();
-  if(auth?.user?.id!==owner||profile!==owner)return;
+  if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+  const baseline=strictData(data);
   const localHash=await signature(data);
+  if(profileEpoch!==epoch||!cloudMeta?.enabled)return;
   const choice=decideSync({
    enabled:cloudMeta.enabled,baseRevision:cloudMeta.revision,baseDigest:cloudMeta.digest,
    localDigest:localHash,remoteRevision:remote.revision,localEmpty:localEmpty(data)
@@ -864,14 +901,17 @@ async function syncCloud(showStatus=false) {
    if(!remote.data){cloudStatus="Cloud copy not found. Local records are unchanged.";return;}
    const restored=strictData(remote.data),hash=await signature(restored);
    // Never overwrite local edits made while the request was in flight.
-   if(auth?.user?.id!==owner||await signature(data)!==localHash){cloudPending=true;return;}
-   await dbWrite(owner,restored);data=restored;
-   cloudMeta={enabled:true,revision:remote.revision,digest:hash};
-   await dbSyncMeta(owner,cloudMeta);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch||await signature(data)!==localHash){cloudPending=true;return;}
+   const metadata={enabled:true,revision:remote.revision,digest:hash};
+   await dbWrite(owner,restored,{expected:baseline,recovery:true,metadata,current:()=>profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
+   if(profileEpoch!==epoch)return;
+   data=restored;cloudMeta=metadata;
    cloudStatus="Cloud changes recovered and saved to this device.";render();
   }else if(choice==="upload"){
    const captured=strictData(data),hash=await signature(captured);
-   const result=await cloudCommit(cloudMeta.revision,captured);
+   if(profileEpoch!==epoch)return;
+   const result=await cloudCommit(cloudMeta.revision,captured,owner);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
    if(result.success){
     cloudMeta={enabled:true,revision:result.revision,digest:hash};
     await dbSyncMeta(owner,cloudMeta);
@@ -892,21 +932,24 @@ async function syncCloud(showStatus=false) {
 }
 async function chooseCloudCopy() {
  if(!auth)return;
- const owner=auth.user.id;
+ if(cloudBusy){toast("A cloud check is in progress. Please retry shortly.");return;}
+ const owner=auth.user.id,epoch=profileEpoch,baseline=strictData(data);
  if(!window.confirm("First export a full JSON backup of your current local records. Continue only if you have saved it. This replaces the current browser profile with the cloud copy."))return;
  if(!window.confirm("Final confirmation: REPLACE this device's local financial records with the saved cloud version?"))return;
+ cloudBusy=true;
  try{
   const remote=await cloudRead();
-  if(auth?.user?.id!==owner||!remote.data)throw Error("Cloud records unavailable.");
+  if(auth?.user?.id!==owner||profileEpoch!==epoch||!remote.data)throw Error("Cloud records unavailable or account changed.");
   const safe=strictData(remote.data);
-  // Preserve the outgoing local records in a separate browser store for recovery.
-  await dbWrite(owner+"-before-cloud-"+Date.now(),data);
-  await dbWrite(owner,safe);data=safe;
-  cloudMeta={enabled:true,revision:remote.revision,digest:await signature(safe)};
-  await dbSyncMeta(owner,cloudMeta);
+  const metadata={enabled:true,revision:remote.revision,digest:await signature(safe)};
+  // Preserve the outgoing local records and metadata in the same transaction.
+  await dbWrite(owner,safe,{expected:baseline,recovery:true,metadata,current:()=>profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
+  if(profileEpoch!==epoch)return;
+  data=safe;cloudMeta=metadata;
   cloudStatus="Cloud copy restored. Previous local records remain in a safety copy in this browser.";
   render();toast("Cloud copy restored.");
  }catch(error){errorMessage(error);}
+ finally{cloudBusy=false;if(cloudPending){cloudPending=false;void syncCloud(false);}}
 }
 document.addEventListener("visibilitychange",()=>{
  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);

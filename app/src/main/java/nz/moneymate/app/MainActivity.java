@@ -839,6 +839,9 @@ public final class MainActivity extends Activity {
             PdfImport.start(this,store,()->Store.databaseName(auth.userId()),data,()->show("Transactions"));
         } else if(code==102&&result==RESULT_OK&&data!=null&&data.getData()!=null) {
             try(java.io.InputStream in=getContentResolver().openInputStream(data.getData())) {
+                final Store restoreStore=store;
+                final String before=store.backupJson();
+                final String owner=auth.userId();
                 java.io.ByteArrayOutputStream buf=new java.io.ByteArrayOutputStream();
                 byte[] block=new byte[8192];int n;
                 while((n=in.read(block))!=-1) {
@@ -850,7 +853,11 @@ public final class MainActivity extends Activity {
                     .setMessage("Your existing transactions, budgets, goals and bills will be replaced. Continue?")
                     .setNegativeButton("Cancel",null)
                     .setPositiveButton("Restore",(dialog,which)->{
-                        try{store.restoreJson(backup);show("Home");Toast.makeText(this,"Restore completed",Toast.LENGTH_LONG).show();}
+                        try{
+                            if(store!=restoreStore||!before.equals(store.backupJson()))throw new IllegalStateException("Profile or records changed during review. Nothing was restored.");
+                            CloudSync.recoveryCopy(this,owner==null?"guest":owner,before);
+                            store.restoreJson(backup);show("Home");Toast.makeText(this,"Restore completed",Toast.LENGTH_LONG).show();
+                        }
                         catch(Exception ex){new AlertDialog.Builder(this).setTitle("Restore failed").setMessage(ex.getMessage()).setPositiveButton("OK",null).show();}
                     }).show();
             }catch(Exception ex){Toast.makeText(this,"Could not read backup: "+ex.getMessage(),Toast.LENGTH_LONG).show();}

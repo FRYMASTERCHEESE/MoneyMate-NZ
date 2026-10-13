@@ -49,7 +49,7 @@ public final class Store extends SQLiteOpenHelper {
         try {
             java.util.Map<String,Integer> existing=new java.util.HashMap<>();
             try(Cursor cursor=db.rawQuery(
-                "SELECT date,kind,category,note,cents FROM transactions WHERE note LIKE 'Bank CSV (%'",null)) {
+                "SELECT date,kind,category,note,cents FROM transactions",null)) {
                 while(cursor.moveToNext()){
                     BankCsv.Entry entry=new BankCsv.Entry(cursor.getString(0),cursor.getString(1),
                         cursor.getString(2),cursor.getString(3),cursor.getLong(4));
@@ -206,8 +206,12 @@ public final class Store extends SQLiteOpenHelper {
         for(String table:tables) {
             org.json.JSONArray rows=backup.getJSONArray(table);
             if(rows.length()>100000) throw new org.json.JSONException("Backup too large");
+            java.util.Set<String> identities=new java.util.HashSet<>();
             for(int i=0;i<rows.length();i++) {
                 org.json.JSONObject row=rows.getJSONObject(i);
+                validateBackupRecord(table,row);
+                String identity=table.equals("budgets")?row.getString("category"):Long.toString(row.getLong("id"));
+                if(!identities.add(identity))throw new org.json.JSONException("Duplicate backup record");
                 if(table.equals("transactions")) {
                     if(!row.has("id")||!row.has("date")||!row.has("kind")||!row.has("category")||!row.has("note")||row.getLong("cents")<=0)
                         throw new org.json.JSONException("Invalid transaction");
@@ -251,6 +255,33 @@ public final class Store extends SQLiteOpenHelper {
             }
             db.setTransactionSuccessful();
         } finally { db.endTransaction(); }
+    }
+    private static void validateBackupRecord(String table,org.json.JSONObject row) throws org.json.JSONException {
+        String[] numbers,texts;
+        switch(table){
+            case "transactions":numbers=new String[]{"id","cents"};texts=new String[]{"kind","category","note","date"};break;
+            case "budgets":numbers=new String[]{"cents"};texts=new String[]{"category"};break;
+            case "goals":numbers=new String[]{"id","target","saved"};texts=new String[]{"name"};break;
+            case "bills":numbers=new String[]{"id","cents"};texts=new String[]{"name","due"};break;
+            default:numbers=new String[]{"id","cents"};texts=new String[]{"kind","category","note","next_date","frequency"};
+        }
+        for(String key:numbers){
+            Object value=row.get(key);
+            if(!(value instanceof Number))throw new org.json.JSONException("Numeric field required");
+            double amount=((Number)value).doubleValue();
+            if(!Double.isFinite(amount)||amount<0||amount>9_007_199_254_740_991L||amount!=Math.floor(amount))
+                throw new org.json.JSONException("Invalid integer amount");
+            if((key.equals("id")||key.equals("target")||(key.equals("cents")&&!table.equals("budgets")))&&amount<1)
+                throw new org.json.JSONException("Positive value required");
+        }
+        for(String key:texts){
+            Object value=row.get(key);
+            if(!(value instanceof String)||((String)value).length()>2000)throw new org.json.JSONException("Invalid text");
+            if((key.equals("name")||key.equals("category"))&&((String)value).trim().isEmpty())throw new org.json.JSONException("Name required");
+        }
+        if(table.equals("transactions")||table.equals("recurring"))
+            if(!java.util.Arrays.asList("Income","Expense").contains(row.getString("kind")))throw new org.json.JSONException("Invalid direction");
+        if(row.length()!=numbers.length+texts.length)throw new org.json.JSONException("Unexpected backup field");
     }
     private boolean allowedColumn(String table,String col) {
         switch(table) {

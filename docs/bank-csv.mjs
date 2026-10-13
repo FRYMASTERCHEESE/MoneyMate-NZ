@@ -105,7 +105,8 @@ function categoryOf(text){
   return "Other";
 }
 function fingerprint(r){
-  return [r.date,r.kind,r.cents,r.category,r.note].join("\u0000");
+  // Reviewed categories can change; the bank's source identity does not.
+  return [r.date,r.kind,r.cents,/^Bank CSV \(/.test(r.note)?"":r.category,r.note].join("\u0000");
 }
 export function planBankCsv(text,existing=[],accountLabel="My bank account"){
   const label=String(accountLabel).trim();
@@ -116,6 +117,7 @@ export function planBankCsv(text,existing=[],accountLabel="My bank account"){
   if(indexes.description<0&&indexes.note<0)throw Error("Missing Description or Note column.");
   if(indexes.amount>=0&&(indexes.debit>=0||indexes.credit>=0))throw Error("Choose an export with either Amount or Debit/Credit columns, not both.");
   if(header.some(h=>/\b(aud|australian dollars?)\b/i.test(h)))throw Error("AUD statement not imported: MoneyMate budgets currently use NZD only.");
+  const ownExport=indexes.description<0&&indexes.note>=0&&indexes.category>=0&&indexes.type>=0&&csvKey(header[indexes.amount])==="amount nzd";
   const existingCounts=new Map();
   for(const row of existing){
     if(!row||!Number.isSafeInteger(row.cents))continue;
@@ -130,7 +132,7 @@ export function planBankCsv(text,existing=[],accountLabel="My bank account"){
     if(indexes.status>=0&&field("status")&&!/^(posted|completed|settled|cleared)$/i.test(field("status")))
       throw Error("Row "+(i+1)+" is pending or unrecognised. Export settled transactions only.");
     const description=field("description")||field("note");
-    if(!description)throw Error("Row "+(i+1)+" has no description.");
+    if(!description&&!ownExport)throw Error("Row "+(i+1)+" has no description.");
     let amount,kind;
     if(indexes.amount>=0){
       amount=money(field("amount"));
@@ -138,6 +140,7 @@ export function planBankCsv(text,existing=[],accountLabel="My bank account"){
       const rawType=field("type").toLowerCase();
       if(rawType&&/^(expense|debit|withdrawal|out|payment)$/.test(rawType))kind="Expense";
       else if(rawType&&/^(income|credit|deposit|in)$/.test(rawType))kind="Income";
+      else if(rawType)throw Error("Row "+(i+1)+" has an unrecognised transaction type.");
       else kind=amount<0?"Expense":"Income";
       // MoneyMate exports expense rows with an unsigned positive Amount NZD column.
       if(amount<0&&kind==="Income")throw Error("Row "+(i+1)+" income has a negative amount.");
@@ -147,7 +150,7 @@ export function planBankCsv(text,existing=[],accountLabel="My bank account"){
       kind=debit!==null&&debit!==0?"Expense":"Income";
       amount=kind==="Expense"?-Math.abs(debit):Math.abs(credit);
     }
-    const note="Bank CSV ("+label+"): "+description.slice(0,1400);
+    const note=ownExport?field("note"):"Bank CSV ("+label+"): "+description.slice(0,1400);
     const record={date:dateOf(field("date")),kind,category:field("category")||categoryOf(description),note,cents:Math.abs(amount)};
     const key=fingerprint(record),ordinal=(seen.get(key)||0)+1;
     seen.set(key,ordinal);
