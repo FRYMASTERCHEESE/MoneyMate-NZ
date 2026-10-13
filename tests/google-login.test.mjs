@@ -20,14 +20,14 @@ test("only public configuration is sent to website",()=>{
 });
 test("direct Google sign-in is added while legacy browser PKCE remains supported",()=>{
  const js=read("docs/web-app.js");
- assert.match(js,/accounts[.]google[.]com\\/gsi\\/client/);
+ assert.ok(js.includes("accounts.google.com/gsi/client"));
  assert.match(js,/sdk[.]renderButton/);
  assert.match(js,/grant_type=id_token/);
  assert.match(js,/provider:"google",id_token:response[.]credential/);
  assert.match(js,/grant_type=pkce/);
  const android=read("app/src/main/java/nz/moneymate/app/MainActivity.java");
  const auth=read("app/src/main/java/nz/moneymate/app/AuthClient.java");
- assert.match(android,/Google sign-in via browser \\(backup\\)/);
+ assert.ok(android.includes("Google sign-in via browser (backup)"));
  assert.match(auth,/grant_type=id_token/);
  assert.match(auth,/grant_type=pkce/);
 });
