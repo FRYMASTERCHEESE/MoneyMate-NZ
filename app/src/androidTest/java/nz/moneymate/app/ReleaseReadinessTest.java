@@ -43,6 +43,28 @@ public class ReleaseReadinessTest {
         } finally {prefs.edit().clear().commit();}
     }
 
+    @Test public void googleStartCreatesPkceBrowserIntentWithoutSendingRequest() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        android.content.SharedPreferences prefs=context.getSharedPreferences("moneymate_google_pkce",Context.MODE_PRIVATE);
+        try {
+            if(!BuildConfig.GOOGLE_ENABLED || !AuthClient.configured()) {
+                try {GoogleOAuth.start(context);fail("Unconfigured login must be blocked");}
+                catch(IllegalStateException expected) {return;}
+            }
+            Intent intent=GoogleOAuth.start(context);Uri destination=intent.getData();
+            assertEquals(Intent.ACTION_VIEW,intent.getAction());
+            assertEquals("google",destination.getQueryParameter("provider"));
+            assertEquals("moneymatenz://auth/callback",destination.getQueryParameter("redirect_to"));
+            assertEquals("s256",destination.getQueryParameter("code_challenge_method"));
+            String verifier=prefs.getString("verifier",null);assertNotNull(verifier);
+            String challenge=android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("SHA-256")
+                .digest(verifier.getBytes(java.nio.charset.StandardCharsets.UTF_8)),
+                android.util.Base64.URL_SAFE|android.util.Base64.NO_WRAP|android.util.Base64.NO_PADDING);
+            assertEquals(challenge,destination.getQueryParameter("code_challenge"));
+            assertNull(destination.getQueryParameter("code_verifier"));
+        } finally {prefs.edit().clear().commit();}
+    }
+
     @Test public void testBuildHasOfficialTestAdsAndExpectedVersion() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);

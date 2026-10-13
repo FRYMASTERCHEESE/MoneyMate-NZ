@@ -25,10 +25,16 @@ the complete document-picker/OCR flow.
 The additional generated PDF instrumentation fixture exercises bundled OCR,
 transaction import, duplicate detection, and JSON restore on both build variants.
 
-Full release lint currently reports 10 pre-existing errors (nine numeric layout
-orientation constants and Android 16 back-navigation handling) and 17 warnings.
-CI reports lint separately with `continue-on-error` so these existing findings do
-not prevent runtime verification. A green workflow does not mean lint is clean.
+The original ten lint errors were addressed by using named orientation constants
+and AndroidX back dispatch with an account-operation guard. Warning fixes cover
+explicit backup/transfer exclusions, reused drawing geometry, themed icons,
+resource qualifiers, and translatable import/consent strings. The chart's
+constructor warning is suppressed locally with a rationale: it is instantiated
+only in Java with category amounts, never inflated from XML. Release lint is now
+a required CI check. API 35 and 36 emulators cover both debug and optimised builds,
+including the back guard, Google PKCE/callback safety, version and test AdMob IDs.
+Production configuration verification checks the package/version/R8 settings and
+rejects missing production AdMob or signing settings without reading any key.
 
 With JDK 17, Gradle 8.13 and Android SDK 36 installed:
 

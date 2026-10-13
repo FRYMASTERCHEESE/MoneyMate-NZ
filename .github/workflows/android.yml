@@ -59,6 +59,10 @@ jobs:
             echo '::error::Production gate unexpectedly allowed missing release configuration'; exit 1
           fi
           grep -q 'A Play release requires your real AdMob app ID' "$RUNNER_TEMP/production-gate.txt"
+          if MONEYMATE_PRODUCTION_RELEASE=true MONEYMATE_ADMOB_APP_ID='ca-app-pub-1111111111111111~1111111111' MONEYMATE_ADMOB_BANNER_ID='ca-app-pub-1111111111111111/1111111111' gradle --no-daemon help > "$RUNNER_TEMP/signing-gate.txt" 2>&1; then
+            echo '::error::Production gate unexpectedly allowed missing signing configuration'; exit 1
+          fi
+          grep -q 'Missing production signing configuration: MONEYMATE_RELEASE_KEYSTORE_PATH' "$RUNNER_TEMP/signing-gate.txt"
       - name: Require clean release lint
         run: gradle --no-daemon :app:lintRelease
       - name: Build optimised instrumentation APKs before starting emulator
