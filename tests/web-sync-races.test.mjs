@@ -13,6 +13,7 @@ function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return {
 function app(){
  const element={addEventListener(){},removeEventListener(){},close(){},classList:{add(){},remove(){}}};
  const context=vm.createContext({...core,writeProfile,decideSync,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
+  FormData:class {get(key){return {category:"Synthetic",note:"Test",amount:"12.34",date:"2026-10-13"}[key];}},
   document:{querySelector:()=>element,querySelectorAll:()=>[],addEventListener(){},visibilityState:"visible"},
   window:{addEventListener(){},confirm:()=>true},setInterval(){},setTimeout(){},clearTimeout(){}});
  const source=readFileSync(new URL("../docs/web-app.js",import.meta.url),"utf8").replace(/^import .*;\r?\n/gm,"").replace(/^bootstrap\(\);/m,"");
@@ -23,9 +24,15 @@ function app(){
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
   sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
+  submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus};}
  })`,context);
 }
+test("rapid repeated Save submissions create exactly one financial entry",async()=>{
+ const h=app();await h.init(A,core.emptyData(),null);
+ await Promise.all([h.submit(),h.submit()]);
+ const saved=await h.read(A);assert.equal(saved.transactions.length,1);assert.equal(saved.transactions[0].cents,1234);
+});
 test("late upload completion cannot attach account A's sync metadata to account B",async()=>{
  const h=app(),old=records("old"),fresh=records("edited"),upload=deferred(),started=deferred();
  await h.init(A,fresh,await h.metadata(old,1));

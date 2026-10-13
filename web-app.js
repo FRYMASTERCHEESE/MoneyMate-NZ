@@ -20,6 +20,7 @@ let refreshInFlight=null;
 let pointsStatus=null,pointsBusy=false;
 let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 let profileEpoch=0;
+let financialSaving=false;
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
@@ -45,9 +46,17 @@ async function dbErase(id){
  const db=await dbOpen();try{await new Promise((resolve,reject)=>{const tx=db.transaction("profiles","readwrite");tx.objectStore("profiles").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error);});}finally{db.close();}
 }
 async function save(next){
- const owner=profile,epoch=profileEpoch,previous=data,safe=strictData(next);data=safe;
+ if(financialSaving)throw Error("Please wait for the previous save to finish.");
+ const safe=strictData(next);
+ financialSaving=true;
+ const owner=profile,epoch=profileEpoch,previous=data;data=safe;
  try{await dbWrite(owner,safe,{expected:previous,current:()=>profile===owner&&profileEpoch===epoch});}
- catch(error){if(profileEpoch===epoch&&data===safe)data=previous;render();throw error;}
+ catch(error){
+  const persisted=await dbRead(owner).catch(()=>previous);
+  if(profileEpoch===epoch&&data===safe)data=persisted;
+  render();throw error;
+ }
+ finally{financialSaving=false;}
  if(profileEpoch!==epoch)return;
  render();
  if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
@@ -333,6 +342,7 @@ async function submitModal(event){
  event.preventDefault();
  if(busy)return;
  const f=new FormData($("#editor-form")),v=key=>String(f.get(key)||"").trim();
+ busy=true;
  try {
   const next=structuredClone(data);
   const amount=["income","expense","recurring","budget","edit-budget","goal","contribute","bill"].includes(modalKind)?cents(v("amount")):0;
@@ -364,6 +374,7 @@ async function submitModal(event){
   }
   await save(next);editor.close();toast("Saved to this device.");
  }catch(error){errorMessage(error);}
+ finally{busy=false;}
 }
 async function mutate(action,id){
  const next=structuredClone(data);
@@ -871,7 +882,7 @@ async function enableCloud() {
 }
 async function syncCloud(showStatus=false) {
  if(!auth||!cloudMeta?.enabled)return;
- if(cloudBusy){cloudPending=true;return;}
+ if(cloudBusy||financialSaving){cloudPending=true;return;}
  cloudBusy=true;
  const owner=auth.user.id,epoch=profileEpoch;
  try{
