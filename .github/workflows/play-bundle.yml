@@ -52,7 +52,26 @@ jobs:
           set -euo pipefail
           AAB=app/build/outputs/bundle/release/app-release.aab
           test -s "$AAB"
-          jarsigner -verify -strict "$AAB" >/dev/null
+          # The upload certificate is deliberately self-signed. Trust only the
+          # configured upload keystore while keeping strict signature checks.
+          # Passing the password by environment avoids putting it in CLI args.
+          VERIFY_LOG="$RUNNER_TEMP/moneymate-aab-verification.log"
+          if ! jarsigner -verify -strict -verbose \
+            -keystore "$MONEYMATE_RELEASE_KEYSTORE_PATH" \
+            -storepass:env MONEYMATE_RELEASE_STORE_PASSWORD \
+            "$AAB" > "$VERIFY_LOG" 2>&1; then
+            cat "$VERIFY_LOG"
+            echo "::error::Signed AAB failed strict signature verification"
+            exit 1
+          fi
+          # jarsigner can return success for an unsigned archive without strict
+          # warnings; demand a signed entry validated against our upload key.
+          if ! grep -Eq '^smk[[:space:]]+[0-9]+' "$VERIFY_LOG" ||
+             ! grep -Fq 'jar verified.' "$VERIFY_LOG"; then
+            cat "$VERIFY_LOG"
+            echo "::error::Signed AAB has no verified entry from the upload key"
+            exit 1
+          fi
           unzip -t "$AAB" >/dev/null
           sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
           echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
