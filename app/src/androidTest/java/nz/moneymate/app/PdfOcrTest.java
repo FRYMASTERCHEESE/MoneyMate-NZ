@@ -22,7 +22,8 @@ public class PdfOcrTest {
         String owner="44444444-4444-4444-8444-444444444444";
         context.deleteDatabase(Store.databaseName(owner));
         try {
-            try(PdfDocument document=new PdfDocument()) {
+            PdfDocument document=new PdfDocument();
+            try {
                 PdfDocument.Page page=document.startPage(new PdfDocument.PageInfo.Builder(800,600,1).create());
                 page.getCanvas().drawColor(Color.WHITE);
                 Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setColor(Color.BLACK);paint.setTextSize(24);
@@ -31,7 +32,7 @@ public class PdfOcrTest {
                 for(int i=0;i<lines.length;i++)page.getCanvas().drawText(lines[i],40,70+i*65,paint);
                 document.finishPage(page);
                 try(FileOutputStream out=new FileOutputStream(file)){document.writeTo(out);}
-            }
+            } finally {document.close();}
             String csv=PdfStatement.toCsv(PdfStatementReader.read(context,Uri.fromFile(file)));
             java.util.List<BankCsv.Entry> rows=BankCsv.parse(csv,"Synthetic");
             assertEquals(2,rows.size());
