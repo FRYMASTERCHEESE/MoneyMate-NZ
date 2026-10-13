@@ -175,13 +175,14 @@ function accountPage(){
     +formField("email","Email address","email","email",true,'autocomplete="username"')
     +formField("password","Password","password","password",true,'autocomplete="current-password"')
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Sign in</button></form>'
-    +'<div class="btns">'+btn("Forgot password","recover","ghost")+(config?.googleEnabled?btn("Continue with Google","google-login","secondary"):"")+'</div></section>'
+    +'<div id="google-identity-button" aria-label="Google account picker" style="min-height:44px;margin:12px 0"></div>'
+    +'<div class="btns">'+btn("Forgot password","recover","ghost")+(config?.googleEnabled?btn("Google sign-in via browser (backup)","google-login","secondary"):"")+'</div></section>'
     +'<section class="panel"><h2>Create your account</h2><form id="signup-form">'
     +formField("new-email","Email address","email","email",true,'autocomplete="username"')
     +formField("new-password","Password (8–128 characters)","password","password",true,'autocomplete="new-password" minlength="8" maxlength="128"')
     +'<label class="field"><span><input type="checkbox" id="terms" required> I have read the <a href="./privacy.html">privacy policy</a>.</span></label>'
     +'<button class="primary" type="submit" '+(!config?"disabled":"")+'>Create account</button></form>'
-    +'<div class="btns">'+(config?.googleEnabled?btn("Sign up with Google","google-login","secondary"):"")+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
+    +'<div class="btns">'+(config?.googleEnabled?btn("Google sign-up via browser (backup)","google-login","secondary"):"")+btn("Confirm email code","confirm","secondary")+btn("Resend code","resend","ghost")+'</div></section></div>';
  }
  html+='<section class="panel" style="margin-top:20px"><h2>Local data & account safety</h2>'
   +'<p class="muted">When you sign out, account records stay in this browser but are hidden until you sign in again. The guest profile remains separately accessible. If you share a computer, use a private device account and a screen lock.</p>'
@@ -622,6 +623,7 @@ async function refreshAdminOverview(silent=true){
 }
 
 function attachAuthForms(){
+ if(!auth&&config?.googleEnabled&&config?.googleClientId)void mountGoogleIdentityButton();
  $("#signin-form")?.addEventListener("submit",e=>{e.preventDefault();withBusy(async()=>{
   const email=$("#email").value.trim(),password=$("#password").value;
   $("#password").value="";
@@ -718,6 +720,46 @@ $("#editor-form").addEventListener("submit",event=>{if(modalKind!=="auth-reset")
   finally{await authApi("/auth/v1/logout?scope=global","POST",{},verified.access_token).catch(()=>{});}
  });
 },true);
+
+/** First-party Google button. Supabase validates Google's signed ID token. */
+let googleIdentityScript=null;
+function loadGoogleIdentity(){
+ if(window.google?.accounts?.id)return Promise.resolve(window.google.accounts.id);
+ if(googleIdentityScript)return googleIdentityScript;
+ googleIdentityScript=new Promise((resolve,reject)=>{
+  const script=document.createElement("script");
+  script.src="https://accounts.google.com/gsi/client";
+  script.async=true;
+  script.onload=()=>window.google?.accounts?.id?resolve(window.google.accounts.id):reject(Error("Google sign-in unavailable"));
+  script.onerror=()=>reject(Error("Google sign-in blocked"));
+  document.head.appendChild(script);
+ });
+ return googleIdentityScript;
+}
+async function mountGoogleIdentityButton(){
+ const target=document.querySelector("#google-identity-button");
+ if(!target||!config?.googleEnabled||!config.googleClientId||auth)return;
+ try{
+  const identity=await loadGoogleIdentity();
+  if(page!=="account"||auth||target!==document.querySelector("#google-identity-button"))return;
+  identity.initialize({client_id:config.googleClientId,auto_select:false,callback:response=>{
+   void withBusy(async()=>{
+    if(auth)return;
+    if(typeof response?.credential!=="string"||!response.credential)throw Error("Google did not provide a credential.");
+    // A Google ID token must never be logged, decoded, cached or included in a URL.
+    let signedIn;
+    try{signedIn=await authApi("/auth/v1/token?grant_type=id_token","POST",{provider:"google",id_token:response.credential});}
+    catch{throw Error("Google sign-in could not be verified. Use browser Google sign-in below.");}
+    await attachSession(signedIn);navigate("account");
+   });
+  }});
+  identity.renderButton(target,{type:"standard",theme:"outline",size:"large",text:"continue_with",width:280});
+ }catch{
+  // Browser PKCE and email login stay available if the Google widget is blocked.
+  if(target===document.querySelector("#google-identity-button"))target.textContent="Google button unavailable. Use browser Google sign-in below.";
+ }
+}
+
 const GOOGLE_PKCE_KEY="MoneyMateNZ-google-login-verifier";
 function toBase64Url(buffer) {
  return btoa(String.fromCharCode(...new Uint8Array(buffer)))
