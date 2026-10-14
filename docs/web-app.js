@@ -821,7 +821,13 @@ async function cloudOnSignin() {
 }
 async function enableCloud() {
  if(!auth)return;
- if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ // An empty signed-in profile can coexist with older guest financial records.
+ // Ask before creating an empty cloud snapshot that omits those local records.
+ if(localEmpty(data)){
+  const guest=await dbRead("guest");
+  if(!localEmpty(guest)&&!window.confirm("Your signed-in account has no records, but this browser has guest finances. To include those finances in cloud sync, select Copy guest records in Account FIRST. Cancel to review, or OK to keep the profiles separate."))return;
+ }
+ if(!window.confirm("Enable MoneyMate NZ cloud sync? Your private income, expenses, budgets, goals and bills will be stored on Supabase servers in Australia under your signed-in account. Guest records are only included after you copy them. Keep a full JSON backup first. Continue?"))return;
  if(cloudBusy)return;
  cloudBusy=true;
  try{
