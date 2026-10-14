@@ -11,6 +11,23 @@ import static org.junit.Assert.*;
 
 @RunWith(AndroidJUnit4.class)
 public class AccountTest {
+    @Test public void rejectedSavingsContributionPreservesTheEntireProfile() throws Exception {
+        Context c=context();String owner="44444444-4444-4444-8444-444444444444";
+        c.deleteDatabase(Store.databaseName(owner));
+        try(Store s=new Store(c,owner)){
+            s.addGoal("Synthetic limit test",100);
+            s.contribute(1,9_007_199_254_740_991L);
+            String before=s.backupJson();
+            for(long amount:new long[]{1,-1,0,Long.MAX_VALUE}){
+                try{s.contribute(1,amount);fail("Unsafe contribution accepted");}
+                catch(IllegalArgumentException expected){}
+                assertEquals(before,s.backupJson());
+            }
+            try{s.contribute(999,1);fail("Missing goal accepted");}
+            catch(IllegalArgumentException expected){}
+            assertEquals(before,s.backupJson());
+        }finally{c.deleteDatabase(Store.databaseName(owner));}
+    }
     @Test public void malformedBackupNeverReplacesExistingRecords() throws Exception {
         Context c=context();String owner="33333333-3333-4333-8333-333333333333";
         c.deleteDatabase(Store.databaseName(owner));

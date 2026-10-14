@@ -40,6 +40,13 @@ final class CloudSync {
             .putString(prefix+"fingerprint",value.fingerprint).commit();
         if(!ok)throw new IllegalStateException("Could not save sync revision");
     }
+    /** Existing cloud consent can carry to a second, empty signed-in device.
+     * An occupied profile never auto-imports or auto-uploads any financial record.
+     */
+    static boolean shouldAutoLinkExisting(Metadata state,long remoteRevision,String local) throws Exception{
+        if(remoteRevision<0)throw new IllegalArgumentException("Invalid cloud revision");
+        return !state.enabled&&remoteRevision>0&&empty(local);
+    }
     static String digest(String snapshot) throws Exception {
         byte[] hash=MessageDigest.getInstance("SHA-256").digest(snapshot.getBytes(StandardCharsets.UTF_8));
         StringBuilder text=new StringBuilder();

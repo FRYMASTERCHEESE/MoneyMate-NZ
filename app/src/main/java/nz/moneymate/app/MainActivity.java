@@ -34,6 +34,11 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     private static final String THEME_URL="https://frymastercheese.github.io/MoneyMate-NZ/app-theme.json";
     private static final String THEME_KEY="remote_theme_v1";
     private AuthClient auth;
+    // Admin access is granted only by the server RPC, never by an email string or UI flag.
+    private org.json.JSONObject adminReport;
+    private String adminReportOwner;
+    private boolean adminCheckRunning=false,cloudLinkCheckRunning=false;
+    private long lastCloudLinkCheck=0L;
     private boolean accountBusy=false;
     private final java.util.concurrent.ExecutorService accountWorker=java.util.concurrent.Executors.newSingleThreadExecutor();
     private String documentOwner;
@@ -80,7 +85,11 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         }
         cloudTimer.removeCallbacks(periodicCloudCheck);
         cloudTimer.postDelayed(periodicCloudCheck,45000L);
-        if(auth.userId()!=null)requestCloudSync(false);
+        if(auth.userId()!=null){
+            requestCloudSync(false);
+            requestAdminOverview(false);
+            attachExistingCloudIfEmpty();
+        }
         // Automatically check the public theme on launch/return.
         if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
@@ -152,6 +161,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     }
     private void show(String page) {
         if(accountBusy)return;
+        if("Admin".equals(page)&&!isVerifiedAdmin())page="Account";
         currentPage=page;
         LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setBackgroundColor(canvasColor);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
@@ -164,12 +174,15 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;case "Admin": admin();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.HORIZONTAL);
         final View[] selectedTab=new View[1];
-        for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"}) {
+        java.util.List<String> navigation=new java.util.ArrayList<>(java.util.Arrays.asList(
+            "Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"));
+        if(isVerifiedAdmin())navigation.add("Admin");
+        for(String tab:navigation) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
             nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
         }
@@ -522,8 +535,89 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         },false);
     }
     private void switchProfile() {
+        adminReport=null;adminReportOwner=null;lastCloudLinkCheck=0L;
         store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
+        if(auth.userId()!=null){
+            requestAdminOverview(false);
+            attachExistingCloudIfEmpty();
+        }
     }
+    private boolean isVerifiedAdmin() {
+        return auth.userId()!=null&&auth.userId().equals(adminReportOwner)&&adminReport!=null;
+    }
+    private void requestAdminOverview(boolean notify) {
+        final String owner=auth.userId();
+        if(owner==null||adminCheckRunning||accountBusy)return;
+        adminCheckRunning=true;
+        accountWorker.execute(()->{
+            org.json.JSONObject result=null;
+            try {result=auth.adminOverview();}catch(Exception ignored) {
+                // A 403 or unavailable server never grants admin UI privileges.
+            }
+            final org.json.JSONObject verified=result;
+            runOnUiThread(()->{
+                adminCheckRunning=false;
+                if(isFinishing()||isDestroyed()||!owner.equals(auth.userId()))return;
+                adminReport=verified;
+                adminReportOwner=verified==null?null:owner;
+                ignoreNextAutoSync=true;
+                show(currentPage);
+                if(notify&&verified==null)message("Admin access unavailable or denied by the account service.");
+            });
+        });
+    }
+    private void admin(){
+        if(!isVerifiedAdmin())return;
+        title("Administrator dashboard");
+        line("Authorized account: "+auth.email()+" · Read-only totals from the secure server.");
+        for(String[] item:new String[][]{
+            {"Registered accounts","registered_users"},
+            {"Confirmed accounts","verified_users"},
+            {"Google accounts","google_users"},
+            {"New registrations (last 7 days)","registrations_last_7_days"},
+            {"Cloud-backed profiles","cloud_sync_accounts"}
+        }){
+            line(item[0]+": "+adminReport.optLong(item[1],0));
+        }
+        line("No individual customer transactions, passwords or private financial data are displayed here.");
+        content.addView(button("Refresh admin statistics",()->requestAdminOverview(true)));
+    }
+    /** Reuse a previously consented cloud copy when this device has no account records.
+     * Never upload new records without consent or replace populated local records.
+     */
+    private void attachExistingCloudIfEmpty(){
+        final String owner=auth.userId();
+        if(owner==null||accountBusy||cloudBusy||cloudLinkCheckRunning||
+           CloudSync.metadata(this,owner).enabled)return;
+        long now=System.currentTimeMillis();
+        if(now-lastCloudLinkCheck<60000L)return;
+        final String before;
+        try{
+            before=store.backupJson();
+            if(!CloudSync.empty(before))return;
+        }catch(Exception ignored){return;}
+        lastCloudLinkCheck=now;cloudLinkCheckRunning=true;
+        accountWorker.execute(()->{
+            long revision=0;
+            try{revision=auth.readAccountSnapshot().getLong("revision");}
+            catch(Exception ignored){/* Offline: retain all existing records and retry. */}
+            final long availableRevision=revision;
+            runOnUiThread(()->{
+                cloudLinkCheckRunning=false;
+                if(isFinishing()||isDestroyed()||accountBusy||!owner.equals(auth.userId()))return;
+                try{
+                    if(!CloudSync.shouldAutoLinkExisting(CloudSync.metadata(this,owner),
+                         availableRevision,store.backupJson()) ||
+                       !CloudSync.digest(before).equals(CloudSync.digest(store.backupJson())))return;
+                    CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
+                    cloudStatus="Existing cloud backup found; syncing this empty device profile.";
+                    requestCloudSync(false);
+                    if("Account".equals(currentPage)){ignoreNextAutoSync=true;show("Account");}
+                }catch(Exception ignored){/* Retain local records and opt-in controls. */}
+            });
+        });
+    }
+
 
     private void banking(){
         title("Bank connections · NZ & Australia");
@@ -583,19 +677,11 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             content.addView(button("Reset password with email code",()->emailCodeForm(true)));
         } else {
             line("Signed in as "+auth.email());
+            if(isVerifiedAdmin())content.addView(button("✦ Admin dashboard",()->show("Admin")));
             CloudSync.Metadata cloud=CloudSync.metadata(this,auth.userId());
             line(cloudStatus+" · "+(cloud.enabled?"Cloud sync enabled":"Cloud sync disabled"));
-            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->new AlertDialog.Builder(this)
-                .setTitle("Back up MoneyMate NZ to the cloud?")
-                .setMessage("Your private financial records will be uploaded to Supabase in Sydney, Australia and become available on your other devices using the same account. This is optional. Keep a full JSON backup first. Existing cloud data is never silently overwritten. Continue?")
-                .setNegativeButton("Cancel",null)
-                .setPositiveButton("Enable",(d,w)->{
-                    try {
-                        CloudSync.persist(this,auth.userId(),new CloudSync.Metadata(true,0,""));
-                        cloudStatus="Cloud sync opted in; checking for existing cloud records";
-                        requestCloudSync(true);
-                    }catch(Exception error){message("Cloud setup failed. Local data was not changed.");}
-                }).show()));
+            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->reviewCloudEnable()));
+
             else content.addView(button("Sync records now",()->requestCloudSync(true)));
             if(cloud.enabled&&cloudStatus.toLowerCase(java.util.Locale.ROOT).contains("conflict"))
                 content.addView(button("Use cloud copy after backup",()->new AlertDialog.Builder(this)
@@ -619,6 +705,50 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             content.addView(button("Delete account permanently",()->deleteForm()));
         }
     }
+    /** Avoid silently uploading an empty signed-in profile when older guest
+     * finances are still on this phone. Explicit users may keep profiles separate.
+     */
+    private void reviewCloudEnable() {
+        if(auth.userId()==null||cloudBusy||accountBusy)return;
+        if(store.isEmpty()) {
+            final boolean guestHasRecords;
+            try(Store guest=new Store(this)) {guestHasRecords=!guest.isEmpty();}
+            catch(Exception error) {
+                message("Could not check existing local records. Save a JSON backup before enabling sync.");
+                return;
+            }
+            if(guestHasRecords) {
+                new AlertDialog.Builder(this)
+                    .setTitle("Existing local records found")
+                    .setMessage("This signed-in account is empty, but your guest profile contains financial records. Use 'Import existing local records' before cloud sync if you want those records on Android and the website. Your guest records remain safe if you keep them separate.")
+                    .setNegativeButton("Cancel",null)
+                    .setNeutralButton("Review account",(d,w)->show("Account"))
+                    .setPositiveButton("Keep separate",(d,w)->confirmCloudEnable())
+                    .show();
+                return;
+            }
+        }
+        confirmCloudEnable();
+    }
+    private void confirmCloudEnable() {
+        final String owner=auth.userId();
+        if(owner==null||cloudBusy||accountBusy)return;
+        new AlertDialog.Builder(this)
+            .setTitle("Back up MoneyMate NZ to the cloud?")
+            .setMessage("Your private income, expenses, budgets, goals, bills and repeating entries will be saved to Supabase servers in Sydney, Australia and synced across your signed-in devices. Guest records are NOT included unless copied into this account. This is optional; save a full JSON backup first. Existing cloud records will not be silently overwritten.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Enable secure sync",(d,w)->{
+                try{
+                    if(!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
+                    if(!CloudSync.metadata(this,owner).enabled)
+                        CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
+                    cloudStatus="Checking private cloud records before syncing.";
+                    ignoreNextAutoSync=true;show("Account");
+                    requestCloudSync(true);
+                }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
+            }).show();
+    }
+
     private void restoreCloudCopy() {
         final String owner=auth.userId();
         if(owner==null||cloudBusy||accountBusy)return;
@@ -736,7 +866,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             if(!"DELETE".equals(confirm.getText().toString())){message("Type DELETE to confirm");return;}
             String secret=password.getText().toString(),database=Store.databaseName(auth.userId());password.setText("");
             accountTask(()->auth.deleteAccount(secret),()->{
-                store.close();auth.clear();deleteDatabase(database);store=new Store(this);show("Account");message("Account deleted. Exported files and records on other devices must be removed separately.");
+                store.close();auth.clear();adminReport=null;adminReportOwner=null;deleteDatabase(database);store=new Store(this);show("Account");message("Account deleted. Exported files and records on other devices must be removed separately.");
             },false);
         }).show();
     }
