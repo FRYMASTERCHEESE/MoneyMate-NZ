@@ -68,7 +68,7 @@ final class PdfImport {
         int pad=(int)(activity.getResources().getDisplayMetrics().density*15);
         box.setPadding(pad,pad,pad,pad);
         TextView warning=new TextView(activity);
-        warning.setText(activity.getString(R.string.pdf_review_warning, entries.size(), preview.inserted, preview.skipped));
+        warning.setText(activity.getResources().getQuantityString(R.plurals.pdf_review_warning, entries.size(), entries.size(), preview.inserted, preview.skipped));
         box.addView(warning);
         ScrollView scroll=new ScrollView(activity);
         LinearLayout list=new LinearLayout(activity);list.setOrientation(LinearLayout.VERTICAL);
