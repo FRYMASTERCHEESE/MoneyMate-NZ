@@ -18,7 +18,8 @@ test("user guide includes all essential website and Android workflows",()=>{
 test("Android help tab exists and warns before backup restore",()=>{
   const android=source("app/src/main/java/nz/moneymate/app/MainActivity.java");
   assert.match(android,/case "Help": help\(\);break/);
-  assert.match(android,/,"Help"\}/);
+  assert.match(android,/"Account","Banking","Help"/);
+  assert.match(android,/if\(isVerifiedAdmin\(\)\)navigation\.add\("Admin"\)/);
   assert.match(android,/private void help\(\)/);
   assert.match(android,/Backup all data \(JSON\)/);
   assert.match(android,/REPLACES existing profile records/);

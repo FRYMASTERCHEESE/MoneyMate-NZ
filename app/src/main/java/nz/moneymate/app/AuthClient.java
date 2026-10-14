@@ -68,6 +68,17 @@ final class AuthClient {
         }
         return session.getString("access_token");
     }
+    /** Server-authorized read-only admin counts; no client email allowlist or service-role key. */
+    JSONObject adminOverview() throws Exception {
+        JSONObject overview=transport.call("/rest/v1/rpc/moneymate_admin_overview","POST",
+            new JSONObject(),accessToken());
+        if(!"admin".equals(overview.optString("role")) ||
+           !overview.has("registered_users") || !overview.has("verified_users") ||
+           !overview.has("google_users") || !overview.has("cloud_sync_accounts") ||
+           overview.optLong("registered_users",-1)<0)
+            throw new IOException("Administrator access unavailable");
+        return overview;
+    }
     JSONObject readAccountSnapshot() throws Exception {
         return transport.call("/rest/v1/rpc/read_account_snapshot","POST",new JSONObject(),accessToken());
     }

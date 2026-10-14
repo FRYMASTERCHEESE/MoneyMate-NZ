@@ -2,7 +2,7 @@ import {planBankCsv} from "./bank-csv.mjs";
 import {pdfStatementToCsv,pdfFileToLines} from "./pdf-statement.mjs";
 import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
-import {decideSync} from "./sync-policy.mjs";
+import {decideSync,shouldLinkExistingCloud} from "./sync-policy.mjs";
 import {writeProfile} from "./profile-store.mjs";
 
 const $=s=>document.querySelector(s);
@@ -165,7 +165,7 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on both devices, changes sync automatically when online. Conflicting edits on two offline devices require a manual choice; keep a JSON backup.</div>';
+ html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on your first device, another empty signed-in device can connect to that cloud copy automatically. Conflicting offline edits require a manual choice; keep a JSON backup.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
    html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
@@ -795,8 +795,22 @@ async function cloudOnSignin() {
  cloudMeta=metadata;
  if(cloudMeta?.enabled){await syncCloud(false);return;}
  try {
+  const baseline=JSON.stringify(data);
   const remote=await cloudRead();
-  if(auth?.user?.id!==owner||profile!==owner)return;
+  if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch)return;
+  // This account already enabled cloud backup elsewhere. A fresh empty browser
+  // can join safely; never overwrite occupied local profiles or upload without consent.
+  if(remote.data&&shouldLinkExistingCloud({
+      enabled:cloudMeta?.enabled,remoteRevision:remote.revision,localEmpty:localEmpty(data)
+     })&&JSON.stringify(data)===baseline){
+    const metadata={enabled:true,revision:0,digest:""};
+    await dbSyncMeta(owner,metadata);
+    if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+    cloudMeta=metadata;
+    cloudStatus="Existing private cloud backup found. Syncing to this empty browser profile.";
+    await syncCloud(false);
+    return;
+  }
   cloudStatus=remote.revision>0?
     "Cloud copy available. Export a JSON backup, then tap Enable secure cloud sync to use it on this device.":
     "Cloud sync is off. Enable it to share your finances across devices.";
@@ -807,7 +821,13 @@ async function cloudOnSignin() {
 }
 async function enableCloud() {
  if(!auth)return;
- if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ // An empty signed-in profile can coexist with older guest financial records.
+ // Ask before creating an empty cloud snapshot that omits those local records.
+ if(localEmpty(data)){
+  const guest=await dbRead("guest");
+  if(!localEmpty(guest)&&!window.confirm("Your signed-in account has no records, but this browser has guest finances. To include those finances in cloud sync, select Copy guest records in Account FIRST. Cancel to review, or OK to keep the profiles separate."))return;
+ }
+ if(!window.confirm("Enable MoneyMate NZ cloud sync? Your private income, expenses, budgets, goals and bills will be stored on Supabase servers in Australia under your signed-in account. Guest records are only included after you copy them. Keep a full JSON backup first. Continue?"))return;
  if(cloudBusy)return;
  cloudBusy=true;
  try{
@@ -921,8 +941,11 @@ window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud
 setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
 async function copyGuest(){
  if(!auth)return;
+ const owner=profile,epoch=profileEpoch,baseline=JSON.stringify(data);
  if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");
  const original=await dbRead("guest");
+ if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch||JSON.stringify(data)!==baseline)
+  throw Error("Account or records changed while reading guest records. Nothing was copied.");
  if(localEmpty(original)){toast("No guest records to copy.");return;}
  if(!confirm("Copy guest income, expenses, budgets, goals, bills and repeating entries into this empty account? The guest records are preserved, and cloud sync will only upload after your consent."))return;
  await save(original);

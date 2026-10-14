@@ -17,7 +17,12 @@ export function iso(date) {
   return date;
 }
 export function month(date){return iso(date).slice(0,7);}
-export function nextId(items){return Math.max(0,...items.map(row=>Number(row.id)||0))+1;}
+export function nextId(items){
+ let highest=0;
+ for(const row of items)highest=Math.max(highest,Number(row.id)||0);
+ if(highest>=Number.MAX_SAFE_INTEGER)throw Error("Record ID limit reached. No records were changed.");
+ return highest+1;
+}
 export function advance(date,frequency) {
   iso(date);const d=new Date(date+"T00:00:00Z");
   if(frequency==="Weekly")d.setUTCDate(d.getUTCDate()+7);
@@ -86,11 +91,14 @@ export function recordDue(data,today) {
   iso(today);
   const result=structuredClone(data);
   let created=0;
+  let id;
   for(const rule of result.recurring){
     let steps=0;
     while(rule.next_date<=today){
       if(++steps>1200||++created>10000)throw Error("Repeating schedule covers too many dates.");
-      result.transactions.push({id:nextId(result.transactions),kind:rule.kind,category:rule.category,
+      if(id===undefined)id=nextId(result.transactions);
+      if(!Number.isSafeInteger(id))throw Error("Record ID limit reached. No records were changed.");
+      result.transactions.push({id:id++,kind:rule.kind,category:rule.category,
         note:rule.note,cents:rule.cents,date:rule.next_date});
       rule.next_date=advance(rule.next_date,rule.frequency);
     }
