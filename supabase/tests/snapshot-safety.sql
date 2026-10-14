@@ -4,7 +4,7 @@ do $test$
 declare
  a uuid:=gen_random_uuid(); b uuid:=gen_random_uuid();
  snapshot jsonb:='{"format":"MoneyMateNZ","version":1,"transactions":[{"id":1,"cents":1234,"kind":"Expense","category":"Food","note":"Synthetic test","date":"2026-10-13"}],"budgets":[{"category":"Food","cents":2000}],"goals":[{"id":1,"name":"Test","target":5000,"saved":100}],"bills":[{"id":1,"name":"Test bill","cents":100,"due":"2026-11-01"}],"recurring":[{"id":1,"cents":100,"kind":"Expense","category":"Food","note":"","next_date":"2026-11-01","frequency":"Weekly"}]}'::jsonb;
- reply jsonb; bad jsonb; rejected boolean;
+ reply jsonb; bad jsonb; rejected boolean; v_rpc text;
 begin
  insert into auth.users(id,aud,role,email,email_confirmed_at,raw_app_meta_data,raw_user_meta_data,created_at,updated_at)
  values(a,'authenticated','authenticated',a::text||'@example.invalid',now(),'{}','{}',now(),now()),
@@ -26,15 +26,14 @@ begin
   if not rejected then raise exception 'Malformed snapshot accepted'; end if;
  end loop;
  if public.read_account_snapshot()->>'revision'<>'2' then raise exception 'Invalid data changed revision'; end if;
- reply:=public.moneymate_claim_daily_points();
- if reply->>'points'<>'10' or reply->>'awarded'<>'10' then raise exception 'Points claim failed'; end if;
- reply:=public.moneymate_claim_daily_points();
- if reply->>'points'<>'10' or reply->>'awarded'<>'0' then raise exception 'Duplicate points claim awarded'; end if;
- if public.moneymate_points_status()->>'daily_claimed'<>'true' then raise exception 'Points status failed'; end if;
+ foreach v_rpc in array array['moneymate_claim_daily_points','moneymate_points_status'] loop
+  rejected:=false;
+  begin execute format('select public.%I()',v_rpc); exception when insufficient_privilege then rejected:=true; end;
+  if not rejected then raise exception 'Retired points RPC executable: %',v_rpc; end if;
+ end loop;
  perform set_config('request.jwt.claims',jsonb_build_object('sub',b,'role','authenticated')::text,true);
  if public.read_account_snapshot()->>'revision'<>'0' then raise exception 'User isolation failed'; end if;
  if exists(select 1 from public.account_snapshots) then raise exception 'Snapshot RLS leaked another account'; end if;
- if public.moneymate_points_status()->>'points'<>'0' then raise exception 'Points isolation failed'; end if;
  reply:=public.commit_account_snapshot(0,snapshot);
  if reply->>'revision'<>'1' then raise exception 'Second account commit failed'; end if;
  if has_table_privilege('authenticated','public.transactions','TRUNCATE') then raise exception 'Unsafe table grant'; end if;
@@ -46,5 +45,4 @@ begin
 end
 $test$;
 rollback;
-select 'PASS: all five record types, revision conflicts, invalid snapshots, RLS, points claims and isolation; all test data rolled back' as verification;
-
+select 'PASS: all five record types, revision conflicts, invalid snapshots, RLS, retired points denial and isolation; all test data rolled back' as verification;

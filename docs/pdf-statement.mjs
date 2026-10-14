@@ -40,6 +40,8 @@ export function pdfStatementToCsv(lines){
   const normalized=amount.replace(/^NZD\s*/i,"").replace(/^\$/,"").replace(/,/g,"").trim();
   const minus=normalized.startsWith("-")||/^\(.*\)$/.test(normalized);
   const plus=normalized.startsWith("+");
+  if(direction&&((minus&&direction.toUpperCase()==="CR")||(plus&&direction.toUpperCase()==="DR")))
+    throw Error("PDF amount direction contradicts its DR/CR marker. Nothing was imported.");
   if(!direction&&!minus&&!plus)
     throw Error("PDF amount has no +, - or DR/CR direction. Nothing was imported.");
   const kind=direction?direction.toUpperCase()==="DR"?"Expense":"Income":minus?"Expense":"Income";

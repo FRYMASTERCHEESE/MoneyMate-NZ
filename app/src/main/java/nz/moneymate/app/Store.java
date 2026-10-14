@@ -86,7 +86,18 @@ public final class Store extends SQLiteOpenHelper {
         getWritableDatabase().insertOrThrow("goals",null,v);
     }
     public void contribute(long id,long cents) {
-        getWritableDatabase().execSQL("UPDATE goals SET saved=saved+? WHERE id=?",new Object[]{cents,id});
+        SQLiteDatabase db=getWritableDatabase();db.beginTransaction();
+        try {
+            long saved;
+            try(Cursor c=db.rawQuery("SELECT saved FROM goals WHERE id=?",new String[]{Long.toString(id)})) {
+                if(!c.moveToFirst())throw new IllegalArgumentException("Goal no longer exists");
+                saved=MoneyMath.addSavings(c.getLong(0),cents);
+            }
+            ContentValues values=new ContentValues();values.put("saved",saved);
+            if(db.update("goals",values,"id=?",new String[]{Long.toString(id)})!=1)
+                throw new IllegalStateException("Goal changed during contribution");
+            db.setTransactionSuccessful();
+        } finally {db.endTransaction();}
     }
     public void addBill(String name,long cents,String due) {
         ContentValues v=new ContentValues();v.put("name",name);v.put("cents",cents);v.put("due",due);

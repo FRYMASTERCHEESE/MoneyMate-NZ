@@ -9,6 +9,10 @@ const lines=[
  "12/10/2026 Countdown Matamata -52.30 1,125.70",
  "13/10/2026 Salary +1,000.00 2,125.70"
 ];
+test("contradictory PDF signs and DR/CR markers reject the entire statement",()=>{
+ for(const amount of ["-42.10 CR","+42.10 DR","(42.10) CR"])
+  assert.throws(()=>pdfStatementToCsv(["Date Description Amount","12/10/2026 Fuel "+amount]),/direction/i);
+});
 test("signed NZD PDF text rows convert to existing additive CSV import safely",()=>{
  const csv=pdfStatementToCsv(lines);
  const p=planBankCsv(csv,[],"Everyday");

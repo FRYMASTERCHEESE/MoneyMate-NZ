@@ -15,7 +15,7 @@ function app(){
  const context=vm.createContext({...core,writeProfile,decideSync,shouldLinkExistingCloud,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
   FormData:class {get(key){return {category:"Synthetic",note:"Test",amount:"12.34",date:"2026-10-13"}[key];}},
   document:{querySelector:()=>element,querySelectorAll:()=>[],addEventListener(){},visibilityState:"visible"},
-  window:{addEventListener(){},confirm:()=>true},setInterval(){},setTimeout(){},clearTimeout(){}});
+  window:{addEventListener(){},confirm:()=>true},confirm:()=>true,setInterval(){},setTimeout(){},clearTimeout(){}});
  const source=readFileSync(new URL("../docs/web-app.js",import.meta.url),"utf8").replace(/^import .*;\r?\n/gm,"").replace(/^bootstrap\(\);/m,"");
  return vm.runInContext(source+`
  render=()=>{};
@@ -23,11 +23,27 @@ function app(){
   async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);},
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
-  sync:syncCloud,onSignin:cloudOnSignin,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
+  sync:syncCloud,onSignin:cloudOnSignin,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,copyGuest,
+  mockGuest(read){const original=dbRead;dbRead=id=>id==="guest"?read():original(id);},
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus};}
  })`,context);
 }
+test("guest copy cannot overwrite another account after an asynchronous read",async()=>{
+ const h=app(),guest=deferred();await h.init(A,core.emptyData(),null);
+ h.mockGuest(()=>guest.promise);const work=h.copyGuest();
+ await h.init(B,records("B private"),null);guest.resolve(records("Guest"));
+ await assert.rejects(work,/changed/);
+ assert.equal((await h.read(B)).goals[0].name,"B private");
+ assert.equal((await h.read(A)).goals.length,0);
+});
+test("guest copy cannot overwrite edits made while reading guest data",async()=>{
+ const h=app(),guest=deferred();await h.init(A,core.emptyData(),null);
+ h.mockGuest(()=>guest.promise);const work=h.copyGuest();
+ await h.save(records("new local edit"));guest.resolve(records("Guest"));
+ await assert.rejects(work,/changed/);
+ assert.equal((await h.read(A)).goals[0].name,"new local edit");
+});
 test("rapid repeated Save submissions create exactly one financial entry",async()=>{
  const h=app();await h.init(A,core.emptyData(),null);
  await Promise.all([h.submit(),h.submit()]);

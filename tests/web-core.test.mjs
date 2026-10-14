@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {cents,nzd,iso,advance,emptyData,strictData,recordDue,totals,csv} from "../docs/web-core.mjs";
+import {cents,nzd,iso,advance,emptyData,strictData,recordDue,totals,csv,nextId} from "../docs/web-core.mjs";
+test("large valid profiles allocate IDs without exhausting the argument stack",()=>{
+ const rows=Array.from({length:100000},(_,i)=>({id:i+1}));
+ assert.equal(nextId(rows),100001);
+ assert.throws(()=>nextId([{id:Number.MAX_SAFE_INTEGER}]),/ID/);
+});
 test("NZD integer cents are exact",()=>{
   assert.equal(cents("$1,234.50"),123450);
   assert.equal(cents("0"),0);

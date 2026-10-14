@@ -5,6 +5,13 @@ import java.util.Arrays;
 import static org.junit.Assert.*;
 
 public class PdfStatementTest {
+    @org.junit.Test public void contradictoryDirectionNeverImports() {
+        for(String amount:new String[]{"-42.10 CR","+42.10 DR","(42.10) CR"}){
+            try {PdfStatement.toCsv(java.util.Arrays.asList("Date Description Amount","12/10/2026 Fuel "+amount));
+                org.junit.Assert.fail("Contradictory direction accepted");}
+            catch(IllegalArgumentException expected){org.junit.Assert.assertTrue(expected.getMessage().contains("direction"));}
+        }
+    }
     @Test public void signedAmountsAndBalanceStaySeparate(){
         String data=PdfStatement.toCsv(Arrays.asList(
             "NZD statement","Date Description Amount Balance",
