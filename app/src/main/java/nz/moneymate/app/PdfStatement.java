@@ -60,6 +60,8 @@ public final class PdfStatement {
             normalized=normalized.replace(",","");
             boolean minus=normalized.startsWith("-")||(normalized.startsWith("(")&&normalized.endsWith(")"));
             boolean plus=normalized.startsWith("+");
+            if(direction!=null&&((minus&&direction.equalsIgnoreCase("CR"))||(plus&&direction.equalsIgnoreCase("DR"))))
+                throw new IllegalArgumentException("PDF amount direction contradicts its DR/CR marker");
             if(direction==null&&!minus&&!plus)throw new IllegalArgumentException("Amount direction is unclear");
             String kind=direction==null?(minus?"Expense":"Income"):(direction.equalsIgnoreCase("DR")?"Expense":"Income");
             String digits=normalized.replaceAll("[()+-]","").replaceFirst("^\\$","");

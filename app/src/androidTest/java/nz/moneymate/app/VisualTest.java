@@ -21,10 +21,22 @@ public class VisualTest {
         Instrumentation inst=InstrumentationRegistry.getInstrumentation();Context ctx=inst.getTargetContext();
         ctx.deleteDatabase("moneymate.db");
         UiDevice device=UiDevice.getInstance(inst);device.setOrientationNatural();
+        // API 36 cold emulators can finish boot while instrumentation is starting.
+        // Stabilise the launcher and wait for real, foreground app content rather
+        // than weakening the assertion or assuming startActivitySync means drawn.
+        device.wakeUp();device.pressHome();device.waitForIdle(3000);
         Intent launch=new Intent(ctx,MainActivity.class).putExtra("captureMode",true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         android.app.Activity activity=inst.startActivitySync(launch);inst.waitForIdleSync();
-        assertTrue(device.wait(Until.hasObject(By.text("Welcome to your money plan")),10000));
         File dir=new File("/sdcard/Download/moneymate-screenshots");device.executeShellCommand("mkdir -p "+dir);
+        boolean welcomeVisible=device.wait(Until.hasObject(By.text("Welcome to your money plan")),30000);
+        if(!welcomeVisible){
+            // Keep evidence when the emulator displays a system overlay, a
+            // different profile, or an actual broken first-screen layout.
+            device.executeShellCommand("screencap -p "+new File(dir,"00-welcome-failure.png"));
+            device.dumpWindowHierarchy(new File(ctx.getCacheDir(),"welcome-failure.xml"));
+        }
+        assertTrue("Expected MoneyMate welcome on foreground app; visible package: "+
+            device.getCurrentPackageName(),welcomeVisible);
         capture(device,dir,"01-welcome.png");
         final android.app.Activity first=activity;inst.runOnMainSync(()->first.finish());inst.waitForIdleSync();
         String today=LocalDate.now().toString();
