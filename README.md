@@ -5,7 +5,7 @@
 - Live web: https://frymastercheese.github.io/MoneyMate-NZ/
 - Public [step-by-step website and Android guide](https://frymastercheese.github.io/MoneyMate-NZ/help.html)
 - Source: `FRYMASTERCHEESE/MoneyMate-NZ`
-- Android application ID: `nz.moneymate.app`; next test version **0.3.6**, version code **10**.
+- Android application ID: `nz.moneymate.app`; next test version **0.3.7**, version code **11**. See [Android optimisation and verification](ANDROID_0.3.7.md).
 
 ## Implemented and automated-test coverage
 

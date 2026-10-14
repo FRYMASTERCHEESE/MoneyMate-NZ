@@ -20,7 +20,11 @@ import java.nio.charset.StandardCharsets;
 import com.google.android.gms.ads.*;
 import com.google.android.ump.*;
 
-public final class MainActivity extends Activity {
+public final class MainActivity extends androidx.activity.ComponentActivity {
+    private final androidx.activity.OnBackPressedCallback accountBackGuard =
+        new androidx.activity.OnBackPressedCallback(false) {
+            @Override public void handleOnBackPressed() { /* Wait for the account operation. */ }
+        };
     private Store store; private LinearLayout root, content; private AdView ad;
     private int ink=ThemeConfig.DEFAULT.ink, green=ThemeConfig.DEFAULT.accent;
     private int canvasColor=ThemeConfig.DEFAULT.background, heroColor=ThemeConfig.DEFAULT.hero;
@@ -47,13 +51,15 @@ public final class MainActivity extends Activity {
         }
     };
     @Override public void onCreate(Bundle state) {
-        super.onCreate(state); auth=new AuthClient(this);store=new Store(this,auth.userId());
+        super.onCreate(state);
+        getOnBackPressedDispatcher().addCallback(this, accountBackGuard);
+        auth=new AuthClient(this);store=new Store(this,auth.userId());
         try {
             applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
         store.postDueRecurring(); show("Home");
         handleGoogleCallback(getIntent());
-        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)))initAds();
+        if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
     private void applyTheme(ThemeConfig config) {
         ink=config.ink;green=config.accent;canvasColor=config.background;
@@ -76,7 +82,7 @@ public final class MainActivity extends Activity {
         cloudTimer.postDelayed(periodicCloudCheck,45000L);
         if(auth.userId()!=null)requestCloudSync(false);
         // Automatically check the public theme on launch/return.
-        if(!(BuildConfig.DEBUG&&getIntent().getBooleanExtra("captureMode",false)) &&
+        if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
     @Override protected void onPause(){cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}
@@ -136,7 +142,7 @@ public final class MainActivity extends Activity {
         b.setTextColor(ink);b.setGravity(android.view.Gravity.START|android.view.Gravity.CENTER_VERTICAL);b.setElevation(dp(1));return b;
     }
     private LinearLayout card() {
-        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(8),dp(8),dp(8),dp(8));
+        LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(8),dp(8),dp(8),dp(8));
         l.setBackground(surface(Color.WHITE,24));l.setElevation(dp(2));
         LinearLayout.LayoutParams lp=new LinearLayout.LayoutParams(-1,-2);lp.setMargins(dp(4),dp(8),dp(4),dp(12));l.setLayoutParams(lp);return l;
     }
@@ -147,21 +153,21 @@ public final class MainActivity extends Activity {
     private void show(String page) {
         if(accountBusy)return;
         currentPage=page;
-        LinearLayout frame=new LinearLayout(this);frame.setOrientation(1);frame.setBackgroundColor(canvasColor);
+        LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setBackgroundColor(canvasColor);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         setContentView(frame);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        root=new LinearLayout(this);root.setOrientation(1);root.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(root);
+        root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(root);
         TextView brand=text("◈  MoneyMate NZ",24,true);root.addView(brand);
         TextView subtitle=text(tagline,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
-        content=new LinearLayout(this);content.setOrientation(1);root.addView(content);
+        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
             case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
-        LinearLayout links=new LinearLayout(this);links.setOrientation(0);
+        LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.HORIZONTAL);
         final View[] selectedTab=new View[1];
         for(String tab:new String[]{"Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"}) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
@@ -222,7 +228,7 @@ public final class MainActivity extends Activity {
         layout.addView(e);return e;
     }
     private void dialog(String label,String[] hints,boolean[] numbers,java.util.function.Consumer<String[]> save) {
-        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(24),dp(8),dp(24),dp(8));
+        LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(24),dp(8),dp(24),dp(8));
         EditText[] es=new EditText[hints.length];
         for(int i=0;i<hints.length;i++)es[i]=input(l,hints[i],numbers[i]);
         new AlertDialog.Builder(this).setTitle(label).setView(l).setNegativeButton("Cancel",null)
@@ -263,7 +269,7 @@ public final class MainActivity extends Activity {
         search.setContentDescription("Search transactions");
         search.setInputType(InputType.TYPE_CLASS_TEXT);
         LinearLayout history=new LinearLayout(this);
-        history.setOrientation(1);
+        history.setOrientation(LinearLayout.VERTICAL);
         content.addView(history);
         renderTransactionHistory(history,"");
         search.addTextChangedListener(new android.text.TextWatcher(){
@@ -299,7 +305,7 @@ public final class MainActivity extends Activity {
     private void recurringForm() {
         final String[] kinds={"Expense","Income"};
         final String[] frequencies={"Weekly","Fortnightly","Monthly"};
-        LinearLayout l=new LinearLayout(this);l.setOrientation(1);l.setPadding(dp(24),dp(8),dp(24),dp(8));
+        LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(24),dp(8),dp(24),dp(8));
         Spinner kind=new Spinner(this);kind.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,kinds));l.addView(kind);
         EditText category=input(l,"Category",false);
         EditText note=input(l,"Note (optional)",false);
@@ -457,7 +463,7 @@ public final class MainActivity extends Activity {
             contents=new String(buf.toByteArray(),StandardCharsets.UTF_8);
         }catch(Exception ex){message("Could not read bank CSV: "+ex.getMessage());return;}
         EditText nickname=new EditText(this);
-        nickname.setSingleLine(true);nickname.setText("Everyday");
+        nickname.setSingleLine(true);nickname.setText(R.string.default_account_nickname);
         nickname.setHint("Account nickname, never account number");
         nickname.setPadding(dp(24),dp(14),dp(24),dp(14));
         new AlertDialog.Builder(this).setTitle("Free NZD bank statement import")
@@ -689,13 +695,13 @@ public final class MainActivity extends Activity {
             });
         });
     }
-    private LinearLayout form(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(1);layout.setPadding(dp(24),dp(8),dp(24),dp(8));return layout;}
+    private LinearLayout form(){LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setPadding(dp(24),dp(8),dp(24),dp(8));return layout;}
     private EditText emailInput(LinearLayout layout){EditText field=input(layout,"Email",false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS);return field;}
     private EditText passwordInput(LinearLayout layout,String hint){EditText field=input(layout,hint,false);field.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_PASSWORD);return field;}
     private String emailValue(EditText field){String value=field.getText().toString().trim();if(!android.util.Patterns.EMAIL_ADDRESS.matcher(value).matches())throw new IllegalArgumentException("Enter a valid email address");return value;}
     private void credentialsForm(boolean signup) {
         LinearLayout layout=form();EditText email=emailInput(layout),password=passwordInput(layout,signup?"Password (at least 8 characters)":"Password");
-        CheckBox consent=new CheckBox(this);consent.setText("I have read the privacy policy and agree to create an account");if(signup)layout.addView(consent);
+        CheckBox consent=new CheckBox(this);consent.setText(R.string.account_signup_consent);if(signup)layout.addView(consent);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle(signup?"Create account":"Sign in").setView(layout).setNegativeButton("Cancel",null).setPositiveButton(signup?"Create account":"Sign in",null).create();
         dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
             try {
@@ -735,22 +741,25 @@ public final class MainActivity extends Activity {
         }).show();
     }
     private interface AccountWork {void run() throws Exception;}
+    void setAccountBusy(boolean busy) {
+        accountBusy=busy;
+        accountBackGuard.setEnabled(busy);
+    }
     private void accountTask(AccountWork work,Runnable success,boolean localSignout) {
-        if(accountBusy)return;accountBusy=true;
+        if(accountBusy)return;setAccountBusy(true);
         int priorOrientation=getRequestedOrientation();setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LOCKED);
         AlertDialog progress=new AlertDialog.Builder(this).setMessage("Contacting account service…").setCancelable(false).create();progress.show();
         accountWorker.execute(()->{
             String failure=null;try{work.run();}catch(Exception error){failure=error instanceof IllegalArgumentException?error.getMessage():"Could not complete the account request. Check your connection and details, or request a fresh code.";}
             final String problem=failure;
             runOnUiThread(()->{
-                accountBusy=false;if(isFinishing()||isDestroyed())return;progress.dismiss();
+                setAccountBusy(false);if(isFinishing()||isDestroyed())return;progress.dismiss();
                 if(problem==null)success.run();else if(localSignout){switchProfile();message("Signed out on this device. Remote session revocation could not be confirmed.");}else message(problem);
                 setRequestedOrientation(priorOrientation);
             });
         });
     }
     private void message(String value){new AlertDialog.Builder(this).setMessage(value).setPositiveButton("OK",null).show();}
-    @Override public void onBackPressed(){if(!accountBusy)super.onBackPressed();}
     @Override protected void onActivityResult(int code,int result,Intent data) {
         super.onActivityResult(code,result,data);
         if(code>=100&&code<=104&&!Store.databaseName(auth.userId()).equals(documentOwner)){message("Profile changed. Please choose the file again.");return;}
