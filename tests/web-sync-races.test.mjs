@@ -23,7 +23,7 @@ function app(){
   async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);},
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
-  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
+  sync:syncCloud,onSignin:cloudOnSignin,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus};}
  })`,context);
@@ -73,4 +73,24 @@ test("existing consented cloud copy attaches only on an empty second device",()=
  assert.equal(shouldLinkExistingCloud({remoteRevision:2,localEmpty:false}),false);
  assert.equal(shouldLinkExistingCloud({enabled:true,remoteRevision:2,localEmpty:true}),false);
  assert.throws(()=>shouldLinkExistingCloud({remoteRevision:-1,localEmpty:true}),/revision/i);
+});
+
+test("signing into an empty browser profile restores an existing consented cloud copy",async()=>{
+ const h=app(),remote=records("cloud backed account");
+ await h.init(A,core.emptyData(),null);
+ h.mock(async()=>({revision:3,data:remote}),()=>assert.fail("Must never upload over existing cloud copy"));
+ await h.onSignin();
+ assert.equal(h.state().cloudMeta.enabled,true);
+ assert.equal(h.state().cloudMeta.revision,3);
+ assert.equal(h.state().data.goals[0].name,"cloud backed account");
+ assert.equal((await h.read(A)).goals[0].name,"cloud backed account");
+});
+test("signing into an occupied browser profile never overwrites existing financial data",async()=>{
+ const h=app(),local=records("keep existing records"),remote=records("other device");
+ await h.init(A,local,null);
+ h.mock(async()=>({revision:8,data:remote}),()=>assert.fail("Unexpected automatic upload"));
+ await h.onSignin();
+ assert.equal(h.state().cloudMeta,null);
+ assert.equal((await h.read(A)).goals[0].name,"keep existing records");
+ assert.match(h.state().cloudStatus,/Cloud copy available/);
 });
