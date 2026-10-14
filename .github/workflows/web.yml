@@ -4,12 +4,16 @@ on:
     paths:
       - 'docs/**'
       - 'tests/**'
+      - 'supabase/**'
+      - 'package*.json'
       - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'tests/**'
+      - 'supabase/**'
+      - 'package*.json'
       - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   workflow_dispatch:
