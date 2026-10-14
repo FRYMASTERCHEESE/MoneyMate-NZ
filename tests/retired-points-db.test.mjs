@@ -63,5 +63,22 @@ test('retired points permissions preserve history, deny RPCs and preserve snapsh
   await assert.rejects(db.query('select public.moneymate_admin_overview()'),e=>e.code==='42501');
   await db.exec('reset role');
   await db.exec(read('supabase/tests/snapshot-safety.sql'));
+  // A membership grant outside this migration's scope must fail closed and
+  // roll back BOTH direct revocations, rather than leave a partial change.
+  await db.exec(`
+   create role legacy_points_access;
+   grant legacy_points_access to authenticated;
+   grant execute on function public.moneymate_claim_daily_points() to legacy_points_access, authenticated;
+   grant execute on function public.moneymate_points_status() to authenticated;
+  `);
+  const grantsBefore = (await db.query(`select proname,proacl::text as acl from pg_proc where proname in ('moneymate_claim_daily_points','moneymate_points_status') order by proname`)).rows;
+  await assert.rejects(db.exec(migration),/permissions remain executable/);
+  await db.exec('rollback');
+  assert.deepEqual((await db.query(`select proname,proacl::text as acl from pg_proc where proname in ('moneymate_claim_daily_points','moneymate_points_status') order by proname`)).rows,grantsBefore);
+  assert.deepEqual((await db.query('select * from public.moneymate_point_balances')).rows,history);
+  assert.deepEqual((await db.query('select * from public.moneymate_point_daily_claims')).rows,claims);
+  await db.exec('revoke legacy_points_access from authenticated');
+  await db.exec(migration);
+  assert.equal((await db.query(`select has_function_privilege('authenticated','public.moneymate_claim_daily_points()','EXECUTE') as allowed`)).rows[0].allowed,false);
  } finally { await db.close(); }
 });

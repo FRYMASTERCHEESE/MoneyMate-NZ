@@ -8,8 +8,11 @@ No live SQL mutations, account records, password hashes, tokens or secrets were 
 
 The security advisor confirms leaked-password protection is disabled. The owning
 organization is on Free. [Supabase documentation](https://supabase.com/docs/guides/auth/password-security)
-requires Pro or above for this feature. The owner must decide whether to upgrade,
-then enable protection in [Email Auth settings](https://supabase.com/dashboard/project/efdegdlsrkxlnjgbxtep/auth/providers?provider=Email).
+requires Pro or above for this feature. The owner has chosen to keep Free for now:
+do not upgrade or change billing. Record the unavailable protection as a remaining
+security limitation; the targeted points fix does not depend on a paid plan.
+If the owner separately approves a future upgrade, protection can be enabled in
+[Email Auth settings](https://supabase.com/dashboard/project/efdegdlsrkxlnjgbxtep/auth/providers?provider=Email).
 Do not raise other password rules or enable reauthentication requirements as part
 of this fix: those need separate client compatibility checks. Use an expendable
 staging account to check compromised-password rejection on signup/reset, safe
@@ -77,8 +80,8 @@ device test. No hosted development branches exist. No paid branch was created.
 4. Read-only verification: run has_function_privilege for anon/authenticated on
    both exact signatures; all four must be false. Run security advisors: the two
    points warnings should disappear; intentional sync/admin warnings remain.
-5. Password protection needs the separate owner plan/settings action above; its
-   advisor warning remains until that action is completed.
+5. Keep Supabase Free as requested. Leaked-password protection's advisor warning
+   remains; no paid plan or Auth settings change is included in this PR.
 
 Emergency rollback would regrant EXECUTE on only these two functions to
 authenticated after owner approval. That restores the retired-feature exposure;
