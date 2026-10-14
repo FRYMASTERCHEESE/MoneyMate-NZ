@@ -680,17 +680,8 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             if(isVerifiedAdmin())content.addView(button("✦ Admin dashboard",()->show("Admin")));
             CloudSync.Metadata cloud=CloudSync.metadata(this,auth.userId());
             line(cloudStatus+" · "+(cloud.enabled?"Cloud sync enabled":"Cloud sync disabled"));
-            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->new AlertDialog.Builder(this)
-                .setTitle("Back up MoneyMate NZ to the cloud?")
-                .setMessage("Your private financial records will be uploaded to Supabase in Sydney, Australia and become available on your other devices using the same account. This is optional. Keep a full JSON backup first. Existing cloud data is never silently overwritten. Continue?")
-                .setNegativeButton("Cancel",null)
-                .setPositiveButton("Enable",(d,w)->{
-                    try {
-                        CloudSync.persist(this,auth.userId(),new CloudSync.Metadata(true,0,""));
-                        cloudStatus="Cloud sync opted in; checking for existing cloud records";
-                        requestCloudSync(true);
-                    }catch(Exception error){message("Cloud setup failed. Local data was not changed.");}
-                }).show()));
+            if(!cloud.enabled)content.addView(button("Enable secure cloud sync",()->reviewCloudEnable()));
+
             else content.addView(button("Sync records now",()->requestCloudSync(true)));
             if(cloud.enabled&&cloudStatus.toLowerCase(java.util.Locale.ROOT).contains("conflict"))
                 content.addView(button("Use cloud copy after backup",()->new AlertDialog.Builder(this)
@@ -714,6 +705,50 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             content.addView(button("Delete account permanently",()->deleteForm()));
         }
     }
+    /** Avoid silently uploading an empty signed-in profile when older guest
+     * finances are still on this phone. Explicit users may keep profiles separate.
+     */
+    private void reviewCloudEnable() {
+        if(auth.userId()==null||cloudBusy||accountBusy)return;
+        if(store.isEmpty()) {
+            final boolean guestHasRecords;
+            try(Store guest=new Store(this)) {guestHasRecords=!guest.isEmpty();}
+            catch(Exception error) {
+                message("Could not check existing local records. Save a JSON backup before enabling sync.");
+                return;
+            }
+            if(guestHasRecords) {
+                new AlertDialog.Builder(this)
+                    .setTitle("Existing local records found")
+                    .setMessage("This signed-in account is empty, but your guest profile contains financial records. Use 'Import existing local records' before cloud sync if you want those records on Android and the website. Your guest records remain safe if you keep them separate.")
+                    .setNegativeButton("Cancel",null)
+                    .setNeutralButton("Review account",(d,w)->show("Account"))
+                    .setPositiveButton("Keep separate",(d,w)->confirmCloudEnable())
+                    .show();
+                return;
+            }
+        }
+        confirmCloudEnable();
+    }
+    private void confirmCloudEnable() {
+        final String owner=auth.userId();
+        if(owner==null||cloudBusy||accountBusy)return;
+        new AlertDialog.Builder(this)
+            .setTitle("Back up MoneyMate NZ to the cloud?")
+            .setMessage("Your private income, expenses, budgets, goals, bills and repeating entries will be saved to Supabase servers in Sydney, Australia and synced across your signed-in devices. Guest records are NOT included unless copied into this account. This is optional; save a full JSON backup first. Existing cloud records will not be silently overwritten.")
+            .setNegativeButton("Cancel",null)
+            .setPositiveButton("Enable secure sync",(d,w)->{
+                try{
+                    if(!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
+                    if(!CloudSync.metadata(this,owner).enabled)
+                        CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
+                    cloudStatus="Checking private cloud records before syncing.";
+                    ignoreNextAutoSync=true;show("Account");
+                    requestCloudSync(true);
+                }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
+            }).show();
+    }
+
     private void restoreCloudCopy() {
         final String owner=auth.userId();
         if(owner==null||cloudBusy||accountBusy)return;
