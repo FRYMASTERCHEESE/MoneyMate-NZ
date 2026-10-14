@@ -5,14 +5,14 @@ import vm from "node:vm";
 import {IDBFactory} from "fake-indexeddb";
 import * as core from "../docs/web-core.mjs";
 import {writeProfile} from "../docs/profile-store.mjs";
-import {decideSync} from "../docs/sync-policy.mjs";
+import {decideSync,shouldLinkExistingCloud} from "../docs/sync-policy.mjs";
 
 const A="11111111-1111-4111-8111-111111111111",B="22222222-2222-4222-8222-222222222222";
 function records(name){const d=core.emptyData();d.goals.push({id:1,name,target:10000,saved:0});return d;}
 function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};}
 function app(){
  const element={addEventListener(){},removeEventListener(){},close(){},classList:{add(){},remove(){}}};
- const context=vm.createContext({...core,writeProfile,decideSync,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
+ const context=vm.createContext({...core,writeProfile,decideSync,shouldLinkExistingCloud,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
   FormData:class {get(key){return {category:"Synthetic",note:"Test",amount:"12.34",date:"2026-10-13"}[key];}},
   document:{querySelector:()=>element,querySelectorAll:()=>[],addEventListener(){},visibilityState:"visible"},
   window:{addEventListener(){},confirm:()=>true},setInterval(){},setTimeout(){},clearTimeout(){}});
@@ -65,4 +65,12 @@ test("initial consent download stops when the account changes",async()=>{
  const work=h.enable();await h.init(B,records("private B"),null);
  download.resolve({revision:1,data:records("A cloud")});await work;
  assert.equal(h.state().cloudMeta,null);assert.equal((await h.read(B)).goals[0].name,"private B");
+});
+
+test("existing consented cloud copy attaches only on an empty second device",()=>{
+ assert.equal(shouldLinkExistingCloud({remoteRevision:2,localEmpty:true}),true);
+ assert.equal(shouldLinkExistingCloud({remoteRevision:0,localEmpty:true}),false);
+ assert.equal(shouldLinkExistingCloud({remoteRevision:2,localEmpty:false}),false);
+ assert.equal(shouldLinkExistingCloud({enabled:true,remoteRevision:2,localEmpty:true}),false);
+ assert.throws(()=>shouldLinkExistingCloud({remoteRevision:-1,localEmpty:true}),/revision/i);
 });
