@@ -25,6 +25,7 @@ function app(){
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
   sync:syncCloud,onSignin:cloudOnSignin,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,copyGuest,
   mockGuest(read){const original=dbRead;dbRead=id=>id==="guest"?read():original(id);},
+  setConfirm(fn){window.confirm=fn;confirm=fn;},
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus};}
  })`,context);
@@ -109,4 +110,30 @@ test("signing into an occupied browser profile never overwrites existing financi
  assert.equal(h.state().cloudMeta,null);
  assert.equal((await h.read(A)).goals[0].name,"keep existing records");
  assert.match(h.state().cloudStatus,/Cloud copy available/);
+});
+
+test("first cloud setup with existing guest finances requires a separate explicit choice",async()=>{
+ const h=app(),guest=records("local guest records"),prompts=[];
+ await h.init(A,core.emptyData(),null);
+ h.mockGuest(async()=>guest);
+ h.setConfirm(text=>{prompts.push(text);return false;});
+ h.mock(()=>assert.fail("Must not contact cloud without consent"),
+        ()=>assert.fail("Must not upload without consent"));
+ await h.enable();
+ assert.equal(prompts.length,1);
+ assert.match(prompts[0],/guest finances/);
+ assert.equal(h.state().cloudMeta,null);
+ assert.equal((await h.read(A)).goals.length,0);
+});
+test("declining cloud upload after choosing to keep guest records separate changes nothing",async()=>{
+ const h=app(),guest=records("guest retained"),prompts=[];
+ await h.init(A,core.emptyData(),null);h.mockGuest(async()=>guest);
+ h.setConfirm(text=>{prompts.push(text);return prompts.length===1;});
+ h.mock(()=>assert.fail("Must not contact cloud until final consent"),
+        ()=>assert.fail("Must not upload without final consent"));
+ await h.enable();
+ assert.equal(prompts.length,2);
+ assert.match(prompts[1],/private income/);
+ assert.equal(h.state().cloudMeta,null);
+ assert.equal((await h.read(A)).goals.length,0);
 });
