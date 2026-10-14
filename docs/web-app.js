@@ -921,8 +921,11 @@ window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud
 setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
 async function copyGuest(){
  if(!auth)return;
+ const owner=profile,epoch=profileEpoch,baseline=JSON.stringify(data);
  if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");
  const original=await dbRead("guest");
+ if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch||JSON.stringify(data)!==baseline)
+  throw Error("Account or records changed while reading guest records. Nothing was copied.");
  if(localEmpty(original)){toast("No guest records to copy.");return;}
  if(!confirm("Copy guest income, expenses, budgets, goals, bills and repeating entries into this empty account? The guest records are preserved, and cloud sync will only upload after your consent."))return;
  await save(original);
