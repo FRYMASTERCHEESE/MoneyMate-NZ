@@ -27,6 +27,14 @@ test("ANZ NZ unsigned withdrawal/deposit columns reconciled with opening and run
  assert.equal(repeat.toAdd.length,0);
  assert.equal(repeat.skipped,3);
 });
+
+test("ANZ rejects impossible calendar dates and accepts a real leap day",()=>{
+ const table=(year,row)=>[`Statement period 01 Jan ${year} - 31 Dec ${year}`,
+  "Date Transaction type and details Withdrawals Deposits Balance","Opening balance 100.00",row+" Coffee 5.00 95.00"];
+ for(const [year,date] of [[2025,"29 Feb 2025"],[2024,"30 Feb 2024"],[2024,"31 Apr 2024"]])
+  assert.throws(()=>anzNzdStatementToCsv(table(year,date)));
+ assert.match(anzNzdStatementToCsv(table(2024,"29 Feb 2024")),/2024-02-29/);
+});
 test("ANZ statement period resolves date without year across December-January boundary",()=>{
  const csv=anzNzdStatementToCsv([
   "Statement period 01 Dec 2025 - 31 Jan 2026",
@@ -36,6 +44,15 @@ test("ANZ statement period resolves date without year across December-January bo
   "01 Jan Pay 50.00 130.00"
  ]);
  assert.deepEqual(planBankCsv(csv).toAdd.map(x=>x.date),["2025-12-31","2026-01-01"]);
+});
+
+test("yearless ANZ leap day resolves across years without accepting impossible dates",()=>{
+ const base=["Statement period 01 Dec 2023 - 29 Feb 2024",
+  "Date Transaction type and details Withdrawals Deposits Balance","Opening balance 100.00"];
+ const csv=anzNzdStatementToCsv([...base,"29 Feb Coffee 5.00 95.00"]);
+ assert.equal(planBankCsv(csv).toAdd[0].date,"2024-02-29");
+ for(const date of ["30 Feb","29 Feb 2023"])
+  assert.throws(()=>anzNzdStatementToCsv([...base,date+" Coffee 5.00 95.00"]));
 });
 test("ANZ carried-forward page balances are checked, not imported",()=>{
  const csv=anzNzdStatementToCsv([

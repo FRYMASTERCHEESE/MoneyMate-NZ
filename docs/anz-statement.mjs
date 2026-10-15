@@ -68,7 +68,13 @@ export function anzNzdStatementToCsv(lines){
   const m=DATE_RE.exec(raw);
   if(!m)continue;
   if(/\b(totals?|closing balance|balance at)\b/i.test(raw))continue;
-  const dates=years.map(y=>dateFrom(m[1],m[2],m[3]||String(y))).filter(x=>x>=start&&x<=end);
+  const dates=[];
+  for(const y of years){
+   let candidate;
+   try{candidate=dateFrom(m[1],m[2],m[3]||String(y));}
+   catch(error){if(m[3])throw error;continue;}
+   if(candidate>=start&&candidate<=end)dates.push(candidate);
+  }
   const distinct=[...new Set(dates)];
   if(distinct.length!==1)throw Error("ANZ transaction year is ambiguous; no records were imported.");
   const rest=raw.slice(m[0].length).trim();

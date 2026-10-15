@@ -25,7 +25,7 @@ function app(){
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
   sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
-  state(){return {profile,data,cloudMeta,cloudStatus};}
+  state(){return {profile,data,cloudMeta,cloudStatus,cloudBusy};}
  })`,context);
 }
 test("rapid repeated Save submissions create exactly one financial entry",async()=>{
@@ -65,4 +65,28 @@ test("initial consent download stops when the account changes",async()=>{
  const work=h.enable();await h.init(B,records("private B"),null);
  download.resolve({revision:1,data:records("A cloud")});await work;
  assert.equal(h.state().cloudMeta,null);assert.equal((await h.read(B)).goals[0].name,"private B");
+});
+
+test("two account profiles exchange every financial record type through revision-checked sync",async()=>{
+ const first=app(),second=app(),full=core.emptyData();
+ full.transactions.push({id:1,kind:"Expense",category:"Food",note:"Synthetic",cents:1234,date:"2026-10-13"});
+ full.budgets.push({category:"Food",cents:30000});
+ full.goals.push({id:1,name:"Emergency",target:100000,saved:5000});
+ full.bills.push({id:1,name:"Power",cents:12000,due:"2026-10-20"});
+ full.recurring.push({id:1,kind:"Income",category:"Salary",note:"Synthetic",cents:100000,next_date:"2026-10-20",frequency:"Weekly"});
+ let cloud={revision:0,data:null};
+ const read=async()=>structuredClone(cloud),commit=async(revision,data)=>{
+  if(revision!==cloud.revision)return {success:false,revision:cloud.revision};
+  cloud={revision:revision+1,data:structuredClone(data)};return {success:true,revision:cloud.revision};
+ };
+ await first.init(A,full,await first.metadata(core.emptyData(),0));first.mock(read,commit);
+ await first.sync();assert.equal(cloud.revision,1);
+ await second.init(A,core.emptyData(),await second.metadata(core.emptyData(),0));second.mock(read,commit);
+ await second.sync();assert.deepEqual(core.strictData(await second.read(A)),full);
+ const edited=structuredClone(full);edited.goals[0].saved=7000;edited.bills=[];
+ await second.save(edited);
+ // Saving starts automatic sync; wait for that upload before polling the other device.
+ for(let attempts=0;second.state().cloudBusy&&attempts<100;attempts++)await new Promise(setImmediate);
+ assert.equal(second.state().cloudBusy,false);await first.sync();
+ assert.equal(cloud.revision,2);assert.deepEqual(core.strictData(await first.read(A)),edited);
 });

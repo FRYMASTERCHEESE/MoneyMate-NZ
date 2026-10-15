@@ -83,6 +83,60 @@ public class AccountTest {
         try(java.io.FileInputStream in=new java.io.FileInputStream(file)){byte[] b=new byte[1024];int n;while((n=in.read(b))!=-1)bytes.write(b,0,n);}
         assertFalse(new String(bytes.toByteArray(),java.nio.charset.StandardCharsets.UTF_8).contains("private-refresh-token"));vault.clear();assertNull(vault.read());
     }
+    @Test public void googleSessionSurvivesReopenAndRotatesExpiredTokens() throws Exception {
+        Context c=context();SessionVault vault=new SessionVault(c);vault.clear();
+        final int[] rotations={0};
+        try {
+            AuthClient.Transport fake=(path,method,body,bearer)->{
+                if(path.contains("grant_type=pkce"))return session(A).put("expires_at",1);
+                if(path.contains("grant_type=refresh_token")){
+                    rotations[0]++;assertEquals("refresh",body.getString("refresh_token"));
+                    return session(A).put("refresh_token","rotated-refresh").put("access_token","rotated-access");
+                }
+                if(path.equals("/auth/v1/user")){assertEquals("rotated-access",bearer);return new JSONObject().put("id",A);}
+                throw new java.io.IOException("Unexpected request");
+            };
+            AuthClient login=new AuthClient(c,fake);
+            login.exchangeGooglePkce("synthetic-code","abcdefghijklmnopqrstuvwxyz0123456789");
+            AuthClient reopened=new AuthClient(c,fake);assertEquals(A,reopened.userId());
+            assertTrue(reopened.validateOnline());assertEquals(1,rotations[0]);
+            AuthClient reopenedAgain=new AuthClient(c,fake);
+            assertEquals(A,reopenedAgain.userId());assertTrue(reopenedAgain.validateOnline());
+            assertEquals(1,rotations[0]);assertEquals("rotated-refresh",new JSONObject(vault.read()).getString("refresh_token"));
+        } finally {vault.clear();}
+    }
+    @Test public void unreadableSavedSessionIsLockedWithoutDeletingVault() throws Exception {
+        SessionVault vault=new SessionVault(context());vault.clear();
+        try {
+            vault.write("temporarily unreadable session");
+            AuthClient reopened=new AuthClient(context(),(path,method,body,bearer)->{throw new java.io.IOException("offline");});
+            assertNull(reopened.userId());
+            assertEquals("temporarily unreadable session",vault.read());
+            reopened.clear();assertNull(vault.read());
+        } finally {vault.clear();}
+    }
+    @Test public void emailSessionReopensOfflineThenPersistsRotatedToken() throws Exception {
+        SessionVault vault=new SessionVault(context());vault.clear();
+        final boolean[] offline={true};final int[] rotations={0};
+        AuthClient.Transport fake=(path,method,body,bearer)->{
+            if(path.contains("grant_type=password"))return session(A).put("expires_at",1);
+            if(offline[0])throw new java.io.IOException("offline");
+            if(path.contains("grant_type=refresh_token")){
+                rotations[0]++;assertEquals("refresh",body.getString("refresh_token"));
+                return session(A).put("access_token","rotated-email-access").put("refresh_token","rotated-email-refresh");
+            }
+            if(path.equals("/auth/v1/user")){assertEquals("rotated-email-access",bearer);return new JSONObject().put("id",A);}
+            throw new java.io.IOException("Unexpected request");
+        };
+        try {
+            new AuthClient(context(),fake).signin("test@example.invalid","long sample password");
+            String saved=vault.read();AuthClient reopened=new AuthClient(context(),fake);
+            assertEquals(A,reopened.userId());assertTrue(reopened.validateOnline());assertEquals(saved,vault.read());
+            offline[0]=false;assertTrue(reopened.validateOnline());assertEquals(1,rotations[0]);
+            assertEquals("rotated-email-refresh",new JSONObject(vault.read()).getString("refresh_token"));
+            assertTrue(new AuthClient(context(),fake).validateOnline());assertEquals(1,rotations[0]);
+        } finally {vault.clear();}
+    }
     private JSONObject session(String id) throws Exception {return new JSONObject().put("access_token","access").put("refresh_token","refresh").put("expires_in",3600).put("user",new JSONObject().put("id",id).put("email","test@example.invalid"));}
     @Test public void signoutLocksLocallyEvenWhenOffline() throws Exception {
         AuthClient client=new AuthClient((path,method,body,bearer)->{if(path.contains("token"))return session(A);throw new java.io.IOException("offline");});

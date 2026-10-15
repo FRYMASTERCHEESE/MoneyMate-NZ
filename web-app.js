@@ -189,8 +189,6 @@ function accountPage(){
  return html;
 }
 
-
-
 function bankingPage(){
  return heading("Bank connections","Import NZD bank statements free, or check future NZ and Australian automatic bank connections.")
   +'<section class="panel"><h2>Free NZD statement imports · CSV or PDF</h2><p>Choose a bank CSV or text-based PDF statement downloaded from your bank. Neither needs a bank connection or paid provider. PDF extraction happens in your browser; PDF.js code downloads when you use it, and the file is never uploaded to a PDF service.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Choose bank PDF file","bank-pdf","secondary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
@@ -565,7 +563,7 @@ async function accessToken(){
 async function restoreLogin(){
  let saved;
  try{saved=await loadLoginSession();}catch{
-  await clearLoginSession().catch(()=>{});
+  // A temporary IndexedDB failure must not erase a valid saved login.
   return;
  }
  if(!saved||auth)return;
@@ -732,6 +730,7 @@ async function signInWithGoogle(){
  sessionStorage.setItem(GOOGLE_PKCE_KEY,verifier);
  const address=new URL(config.url+"/auth/v1/authorize");
  address.searchParams.set("provider","google");
+ address.searchParams.set("prompt","select_account");
  address.searchParams.set("redirect_to",redirect);
  address.searchParams.set("code_challenge",toBase64Url(digest));
  address.searchParams.set("code_challenge_method","s256");
@@ -739,18 +738,22 @@ async function signInWithGoogle(){
 }
 async function finishGoogleSignin(){
  const params=new URLSearchParams(location.search),code=params.get("code");
- if(!code)return;
+ const failure=params.get("error")||new URLSearchParams(location.hash.slice(1)).get("error");
+ if(!code&&!failure)return;
  const verifier=sessionStorage.getItem(GOOGLE_PKCE_KEY);
  sessionStorage.removeItem(GOOGLE_PKCE_KEY);
  history.replaceState(null,"",location.pathname+(location.hash||""));
- if(!verifier){toast("Google sign-in session expired. Start again from Account.");return;}
+ if(failure){
+  history.replaceState(null,"",location.pathname+"#account");
+  await restoreLogin();navigate("account");
+  toast("Google sign-in was cancelled or denied. Your existing records are unchanged. Try again from Account.");return;
+ }
+ if(!verifier){await restoreLogin();navigate("account");toast("Google sign-in session expired. Start again from Account.");return;}
  try {
   const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
   await attachSession(session);navigate("account");
- }catch(error){errorMessage(error);}
+ }catch(error){await restoreLogin();navigate("account");errorMessage(error);}
 }
-
-
 
 async function dbSyncMeta(id,write) {
  const db=await dbOpen();
@@ -914,9 +917,6 @@ document.addEventListener("visibilitychange",()=>{
  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
 });
 
-
-
-
 window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
 setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
 async function copyGuest(){
@@ -928,7 +928,6 @@ async function copyGuest(){
  await save(original);
  toast("Guest records copied safely. The original guest profile was not changed.");
 }
-
 
 async function bootstrap(){
  try{
@@ -942,7 +941,7 @@ async function bootstrap(){
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
   }catch{if(page==="account")render();}
-  if(new URLSearchParams(location.search).has("code"))await finishGoogleSignin();
+  if(new URLSearchParams(location.search).has("code")||new URLSearchParams(location.search).has("error")||new URLSearchParams(location.hash.slice(1)).has("error"))await finishGoogleSignin();
   else await restoreLogin();
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){

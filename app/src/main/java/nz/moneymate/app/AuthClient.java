@@ -16,7 +16,9 @@ final class AuthClient {
     AuthClient(Context context,Transport customTransport) {
         vault=new SessionVault(context);transport=customTransport==null?this::http:customTransport;
         try {String saved=vault.read();if(saved!=null){session=new JSONObject(saved);validateSession(session);}}
-        catch(Exception error){session=null;vault.clear();}
+        // A temporarily unavailable file or keystore must not destroy a saved login.
+        // Leave unreadable credentials locked; explicit sign-out still clears them.
+        catch(Exception error){session=null;}
     }
     AuthClient(Transport transport){this.transport=transport;vault=null;}
     static boolean configured(){return !BuildConfig.SUPABASE_URL.isEmpty()&&!BuildConfig.SUPABASE_KEY.isEmpty();}

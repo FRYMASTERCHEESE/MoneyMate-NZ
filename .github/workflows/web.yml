@@ -4,12 +4,18 @@ on:
     paths:
       - 'docs/**'
       - 'tests/**'
+      - 'supabase/functions/delete-account/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   pull_request:
     paths:
       - 'docs/**'
       - 'tests/**'
+      - 'supabase/functions/delete-account/**'
+      - 'package.json'
+      - 'package-lock.json'
       - 'app/src/main/java/nz/moneymate/app/**'
       - '.github/workflows/web.yml'
   workflow_dispatch:
@@ -26,7 +32,7 @@ jobs:
       - run: node --check docs/web-app.js
       - run: npm ci --ignore-scripts
       - run: node --check docs/web-core.mjs
-      - run: node --test tests/*.test.mjs
+      - run: npm test
       - name: Check publishable website files
         run: |
           test -s docs/index.html
