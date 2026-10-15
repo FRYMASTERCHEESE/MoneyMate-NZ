@@ -73,23 +73,14 @@ jobs:
             exit 1
           fi
           unzip -t "$AAB" >/dev/null
+          # Release must not package shared libraries; original bundled OCR
+          # triggered the Google Play native-debug-symbol warning.
           unzip -Z1 "$AAB" > "$RUNNER_TEMP/signed-bundle-entries.txt"
-          if grep -E '[.]so
-          sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
-          echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MoneyMate-NZ-Signed-Play-AAB
-          path: |
-            app/build/outputs/bundle/release/*.aab
-            app/build/outputs/bundle/release/*.sha256
-            app/build/outputs/mapping/release/
-          retention-days: 7
- "$RUNNER_TEMP/signed-bundle-entries.txt"; then
-            echo '::error::Signed bundle contains native libraries; OCR experiment release gate failed.'
+          if grep -E '^base/lib/.*[.]so$' "$RUNNER_TEMP/signed-bundle-entries.txt"; then
+            echo "::error::Signed bundle contains native libraries"
             exit 1
           fi
-          echo 'Verified signed bundle contains no native shared libraries.'
+          echo 'Verified: no native shared libraries in signed bundle.'
           sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
           echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
       - uses: actions/upload-artifact@v4
