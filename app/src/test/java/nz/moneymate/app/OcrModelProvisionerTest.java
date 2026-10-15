@@ -15,21 +15,43 @@ public class OcrModelProvisionerTest {
     }
     private static final class Source implements OcrModelProvisioner.Source {
         final Clock clock; final int[] errors; final long readyAt;
-        int attempts,closed; boolean requestFailure,preinstalled;
+        int attempts,closed,reconnections; long changeAt=Long.MAX_VALUE,lastInstallGeneration; boolean requestFailure,preinstalled,replaceDuringRequest;
+        public long generation(){return clock.time>=changeAt?2L:1L;}
+        public void reconnect(){reconnections++;}
         Source(Clock clock,long readyAt,int...errors){this.clock=clock;this.readyAt=readyAt;this.errors=errors;}
         public boolean available(long timeout){
             assertTrue(timeout>0 && timeout<=8000);
-            return preinstalled || attempts>0 && errors[Math.min(attempts-1,errors.length-1)]==0 && clock.time>=readyAt;
+            return preinstalled || attempts>0 && lastInstallGeneration==generation() && errors[Math.min(attempts-1,errors.length-1)]==0 && clock.time>=readyAt;
         }
         public OcrModelProvisioner.Installation install(long timeout) throws Exception {
             assertTrue(timeout>0 && timeout<=20000);
+            lastInstallGeneration=generation();
             final int error=errors[Math.min(attempts++,errors.length-1)];
+            if(replaceDuringRequest && attempts==1){clock.time=85000L;throw new TimeoutException("service request lost");}
             if(requestFailure && error!=0)throw new OcrModelProvisioner.Failure(error,"request failed",null);
             return new OcrModelProvisioner.Installation(){
                 public OcrModelProvisioner.Failure failure(){return error==0?null:new OcrModelProvisioner.Failure(error,"install failed",null);}
                 public void close(){closed++;}
             };
         }
+    }
+    @Test public void serviceReplacementReissuesAbandonedRequestWithoutFailureCallback() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,150000L,0);source.changeAt=85000L;
+        OcrModelProvisioner.ensureReady(source,clock);
+        assertEquals(2,source.attempts);assertEquals(2,source.closed);assertEquals(1,source.reconnections);
+        assertTrue(clock.time>=150000L && clock.time<=240000L);
+    }
+    @Test public void inFlightRequestTimeoutRecoversOnlyAfterVerifiedReplacement() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,150000L,0);source.changeAt=85000L;source.replaceDuringRequest=true;
+        OcrModelProvisioner.ensureReady(source,clock);
+        assertEquals(2,source.attempts);assertEquals(1,source.closed);assertEquals(1,source.reconnections);
+        assertTrue(clock.time>=150000L && clock.time<=240000L);
+    }
+    @Test public void serviceReplacementCannotResetTheWaitForever() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,Long.MAX_VALUE,0);source.changeAt=119000L;
+        try{OcrModelProvisioner.ensureReady(source,clock);fail("Unavailable replacement accepted");}
+        catch(TimeoutException expected){assertTrue(clock.time<=240000L);}
+        assertEquals(2,source.attempts);assertEquals(2,source.closed);assertEquals(1,source.reconnections);
     }
     @Test public void cachedModelDoesNotRequestInstallOrWait() throws Exception {
         Clock clock=new Clock();Source source=new Source(clock,0L,0);source.preinstalled=true;

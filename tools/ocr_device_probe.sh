@@ -29,9 +29,9 @@ adb logcat -v threadtime > "${prefix}-logcat.txt" 2>&1 &
 log_pid=$!
 set +e
 if [[ "$variant" == debug ]]; then
-  timeout --kill-after=15 300 gradle --no-daemon :app:connectedDebugAndroidTest > "${prefix}-gradle.txt" 2>&1
+  timeout --kill-after=15 420 gradle --no-daemon :app:connectedDebugAndroidTest > "${prefix}-gradle.txt" 2>&1
 else
-  timeout --kill-after=15 300 gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest > "${prefix}-gradle.txt" 2>&1
+  timeout --kill-after=15 420 gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest > "${prefix}-gradle.txt" 2>&1
 fi
 test_status=$?
 set -e

@@ -60,19 +60,30 @@ public final class PdfStatementReader {
     private static void waitForOcrModel(Context context, TextRecognizer recognizer) throws Exception {
         try {
             OcrModelProvisioner.ensureReady(new OcrModelProvisioner.Source(){
-                private final ModuleInstallClient client=ModuleInstall.getClient(context);
+                private ModuleInstallClient client=ModuleInstall.getClient(context);
+                public long generation(){
+                    try{
+                        android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo("com.google.android.gms",0);
+                        return android.os.Build.VERSION.SDK_INT>=28?info.getLongVersionCode():info.versionCode;
+                    }catch(android.content.pm.PackageManager.NameNotFoundException missing){return -1L;}
+                }
+                public void reconnect(){
+                    client=ModuleInstall.getClient(context);
+                    android.util.Log.i("MoneyMateOcr","Reconnecting model delivery; Play services version="+generation());
+                }
                 public boolean available(long timeout) throws Exception {
                     return moduleResult(client.areModulesAvailable(recognizer),timeout).areModulesAvailable();
                 }
                 public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                    final ModuleInstallClient requestClient=client;
                     // A new listener per request keeps old-session callbacks from
                     // contaminating a retry after Play services replaces itself.
                     final AtomicReference<ModuleInstallStatusUpdate> latest=new AtomicReference<>();
                     final InstallStatusListener listener=latest::set;
                     try {
-                        moduleResult(client.installModules(ModuleInstallRequest.newBuilder()
+                        moduleResult(requestClient.installModules(ModuleInstallRequest.newBuilder()
                                 .addApi(recognizer).setListener(listener).build()),timeout);
-                    }catch(Exception failed){client.unregisterListener(listener);throw failed;}
+                    }catch(Exception failed){requestClient.unregisterListener(listener);throw failed;}
                     return new OcrModelProvisioner.Installation(){
                         public OcrModelProvisioner.Failure failure(){
                             ModuleInstallStatusUpdate update=latest.get();
@@ -84,7 +95,7 @@ public final class PdfStatementReader {
                             android.util.Log.w("MoneyMateOcr","Model install error: "+code+" "+ModuleInstallStatusCodes.getStatusCodeString(code)+", session="+update.getSessionId());
                             return new OcrModelProvisioner.Failure(code,"OCR model installation failed (code "+code+", "+ModuleInstallStatusCodes.getStatusCodeString(code)+", session "+update.getSessionId()+"). No records were added.",null);
                         }
-                        public void close(){client.unregisterListener(listener);}
+                        public void close(){requestClient.unregisterListener(listener);}
                     };
                 }
             },new OcrModelProvisioner.Clock(){
