@@ -53,88 +53,20 @@ jobs:
           MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
           MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
         run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
-      - name: Inspect available native debug symbols (no release upload)
+      - name: Inspect native symbol availability (no Play release)
         shell: bash
         run: |
           set -euo pipefail
           SYMBOLS="app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip"
           if [[ -s "$SYMBOLS" ]]; then
-            echo "Native symbols archive produced:"
-            unzip -Z1 "$SYMBOLS" | head -30
+            echo "Native debug archive produced:"
             unzip -t "$SYMBOLS" >/dev/null
+            unzip -Z1 "$SYMBOLS" | head -30
           else
-            echo "::notice::No native symbol archive generated. Bundled Google ML Kit OCR may already be stripped by its publisher; cannot manufacture missing debug data."
+            echo "::notice::ML Kit native symbols could not be extracted (publisher may ship stripped libraries)."
           fi
-          echo "Native libraries present in the release bundle:"
+          echo "Bundled native libraries:"
           unzip -Z1 app/build/outputs/bundle/release/app-release.aab | grep -F '.so' || true
-      - name: Verify production release refuses missing protected configuration
-        run: |
-          if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
-            echo '::error::Production gate unexpectedly allowed missing release configuration'; exit 1
-          fi
-          grep -q 'A Play release requires your real AdMob app ID' "$RUNNER_TEMP/production-gate.txt"
-          if MONEYMATE_PRODUCTION_RELEASE=true MONEYMATE_ADMOB_APP_ID='ca-app-pub-1111111111111111~1111111111' MONEYMATE_ADMOB_BANNER_ID='ca-app-pub-1111111111111111/1111111111' gradle --no-daemon help > "$RUNNER_TEMP/signing-gate.txt" 2>&1; then
-            echo '::error::Production gate unexpectedly allowed missing signing configuration'; exit 1
-          fi
-          grep -q 'Missing production signing configuration: MONEYMATE_RELEASE_KEYSTORE_PATH' "$RUNNER_TEMP/signing-gate.txt"
-      - name: Require clean release lint
-        run: gradle --no-daemon :app:lintRelease
-      - name: Build optimised instrumentation APKs before starting emulator
-        run: gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:assembleR8Test :app:assembleR8TestAndroidTest
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-      - name: Run all JavaScript regression tests
-        run: |
-          npm ci --ignore-scripts
-          npm test
-      - name: Enable emulator acceleration
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-      - name: Verify debug and optimised app on a fresh emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: ${{ matrix.api-level }}
-          arch: x86_64
-          profile: pixel_2
-          disable-animations: true
-          script: |
-            mkdir -p screenshots
-            timeout --kill-after=15 300 gradle --no-daemon :app:connectedDebugAndroidTest || { timeout 30 adb logcat -d > screenshots/debug-logcat.txt; exit 1; }
-            timeout --kill-after=15 300 gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest || { timeout 30 adb logcat -d > screenshots/r8test-logcat.txt; exit 1; }
-            mkdir -p screenshots
-            adb pull /sdcard/Download/moneymate-screenshots/. screenshots/
-            "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > screenshots/apk-certificate.txt
-            grep -q '7bf330320f1084bed0f590db25269ad8559d3195a85ff3a1a4c442ed3d0f664c' screenshots/apk-certificate.txt
-      - name: Check release obfuscation evidence
-        run: |
-          test -s app/build/outputs/mapping/release/mapping.txt
-          test -s app/build/outputs/mapping/release/configuration.txt
-          test -s app/build/outputs/mapping/release/usage.txt
-          python3 tools/r8_report.py
-      - name: Upload Android screenshots and test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: moneymate-visual-verification-api-${{ matrix.api-level }}
-          path: |
-            screenshots/
-            app/build/reports/androidTests/
-            app/build/reports/tests/
-            app/build/reports/lint-results-release*
-            app/build/outputs/mapping/release/
-            app/build/outputs/mapping/r8Test/
-            app/build/reports/r8-summary.json
-      - name: Upload test APK and unsigned release AAB
-        uses: actions/upload-artifact@v4
-        with:
-          name: moneymate-android-build-api-${{ matrix.api-level }}
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/bundle/release/*.aab
- || true
       - name: Verify production release refuses missing protected configuration
         run: |
           if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
