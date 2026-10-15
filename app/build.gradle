@@ -66,6 +66,10 @@ android {
         release {
             minifyEnabled true
             shrinkResources true
+            // Ask AGP to embed native symbol tables when dependencies provide them.
+            // Google ML Kit OCR ships prebuilt libraries, so inspect generated
+            // output: this flag cannot reconstruct upstream-stripped symbols.
+            ndk { debugSymbolLevel 'SYMBOL_TABLE' }
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
             if (productionRelease) signingConfig signingConfigs.production
         }

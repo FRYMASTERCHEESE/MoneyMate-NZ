@@ -53,6 +53,20 @@ jobs:
           MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
           MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
         run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
+      - name: Inspect native symbol availability (no Play release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          SYMBOLS="app/build/outputs/native-debug-symbols/release/native-debug-symbols.zip"
+          if [[ -s "$SYMBOLS" ]]; then
+            echo "Native debug archive produced:"
+            unzip -t "$SYMBOLS" >/dev/null
+            unzip -Z1 "$SYMBOLS" | head -30
+          else
+            echo "::notice::ML Kit native symbols could not be extracted (publisher may ship stripped libraries)."
+          fi
+          echo "Bundled native libraries:"
+          unzip -Z1 app/build/outputs/bundle/release/app-release.aab | grep -F '.so' || true
       - name: Verify production release refuses missing protected configuration
         run: |
           if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
