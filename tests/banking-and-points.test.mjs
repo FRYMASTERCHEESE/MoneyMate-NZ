@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 test("offline cache refreshes on points retirement without resetting browser data",()=>{
  assert.equal(read("sw.js"),read("docs/sw.js"));
- assert.match(read("docs/sw.js"),/moneymate-nz-web-v11-points-retired/);
+ assert.match(read("docs/sw.js"),/moneymate-nz-web-v12-statements-only/);
  assert.match(read("docs/sw.js"),/caches\.delete\(key\)/);
 });
 test("published website paths match and show no points UI",()=>{
@@ -35,9 +35,18 @@ test("historic points data remains intact and revocation is non-destructive",()=
  assert.match(retired,/revoke execute on function public\.moneymate_points_status\(\)/i);
  assert.doesNotMatch(retired,/drop table|truncate|delete from/i);
 });
-test("automatic bank connections still not live",()=>{
+test("no paid bank connection options remain in Android or published website",()=>{
  const js=read("docs/web-app.js"),a=read("app/src/main/java/nz/moneymate/app/MainActivity.java");
- assert.match(js,/Not available yet/);assert.match(js,/Provider approval required/);
- assert.match(a,/NOT LIVE/);assert.match(js,/Akahu/);assert.match(js,/Basiq/);
+ const html=read("docs/index.html"),help=read("docs/help.html");
+ for(const source of [js,a,html,help]){
+   assert.doesNotMatch(source,/Akahu|Basiq|Provider approval required|About Basiq|About Akahu|Planned:.*open.banking/i);
+ }
+ assert.match(js,/does not offer bank account connections/);
+ assert.match(a,/does not connect to bank accounts/);
+ assert.match(js,/btn\("Choose statement CSV file","bank-csv"/);
+ assert.match(js,/btn\("Choose statement PDF file","bank-pdf"/);
+ assert.match(a,/chooseBankCsv\(\)/);
+ assert.match(a,/chooseBankPdf\(\)/);
+ assert.match(html,/Import statements/);
  assert.doesNotMatch(js,/bank_password|bankPassword|client_secret/);
 });

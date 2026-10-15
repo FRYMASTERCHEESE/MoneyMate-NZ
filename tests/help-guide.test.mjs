@@ -18,7 +18,7 @@ test("user guide includes all essential website and Android workflows",()=>{
 test("Android help tab exists and warns before backup restore",()=>{
   const android=source("app/src/main/java/nz/moneymate/app/MainActivity.java");
   assert.match(android,/case "Help": help\(\);break/);
-  assert.match(android,/"Account","Banking","Help"/);
+  assert.match(android,/"Account","Statements","Help"/);
   assert.match(android,/if\(isVerifiedAdmin\(\)\)navigation\.add\("Admin"\)/);
   assert.match(android,/private void help\(\)/);
   assert.match(android,/Backup all data \(JSON\)/);
@@ -30,5 +30,5 @@ test("both website and Android correctly distinguish imported statements from li
   const android=source("app/src/main/java/nz/moneymate/app/MainActivity.java");
   assert.match(help,/Import your NZD bank CSV or PDF statement for free/);
   assert.match(help,/does <em>not<\/em> automatically download/);
-  assert.match(android,/Automatic live bank connections are not yet available/);
+  assert.match(android,/does not offer bank account linking or paid provider subscriptions/);
 });
