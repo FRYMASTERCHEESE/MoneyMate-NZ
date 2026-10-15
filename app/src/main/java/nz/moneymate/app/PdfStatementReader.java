@@ -7,6 +7,8 @@ import android.graphics.Rect;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
+import com.google.android.gms.common.moduleinstall.ModuleInstall;
+import com.google.android.gms.common.moduleinstall.ModuleInstallRequest;
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
@@ -32,6 +34,33 @@ public final class PdfStatementReader {
         final int x,y;final String text;
         Piece(int x,int y,String text){this.x=x;this.y=y;this.text=text;}
     }
+    /** Never read financial PDFs before the optional on-device OCR model is ready.
+     * This runs on PdfImport's background worker, not the Android UI thread.
+     */
+    private static void waitForOcrModel(Context context, TextRecognizer recognizer) throws Exception {
+        final var client=ModuleInstall.getClient(context);
+        try {
+            if(Tasks.await(client.areModulesAvailable(recognizer),12,TimeUnit.SECONDS)
+                    .areModulesAvailable())return;
+            // Asks Google Play services to fetch the model; this call does NOT
+            // mean download has finished. Check availability again before OCR.
+            Tasks.await(client.installModules(ModuleInstallRequest.newBuilder()
+                    .addApi(recognizer).build()),20,TimeUnit.SECONDS);
+            for(int attempt=0;attempt<12;attempt++){
+                if(Tasks.await(client.areModulesAvailable(recognizer),8,TimeUnit.SECONDS)
+                        .areModulesAvailable())return;
+                Thread.sleep(2500L);
+            }
+            throw new IllegalStateException("OCR model is still downloading. Connect to Wi-Fi and retry the PDF import. No records were added.");
+        }catch(InterruptedException interrupted){
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("OCR setup was interrupted. No records were added.",interrupted);
+        }catch(IllegalStateException alreadyClear){
+            throw alreadyClear;
+        }catch(Exception unavailable){
+            throw new IllegalStateException("Google Play services OCR is unavailable. Check Google Play services and connect to the internet, then retry. No records were added.",unavailable);
+        }
+    }
     public static List<String> read(Context context, Uri uri) throws Exception {
         if(uri==null)throw new IllegalArgumentException("Choose a PDF statement");
         File privateCopy=File.createTempFile("bank-statement-",".pdf",context.getCacheDir());
@@ -54,6 +83,7 @@ public final class PdfStatementReader {
             TextRecognizer recognizer=TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
             try(ParcelFileDescriptor fd=ParcelFileDescriptor.open(privateCopy,ParcelFileDescriptor.MODE_READ_ONLY);
                 PdfRenderer renderer=new PdfRenderer(fd)) {
+                waitForOcrModel(context,recognizer);
                 if(renderer.getPageCount()>8)throw new IllegalArgumentException("For safety import PDFs of eight pages or fewer");
                 List<String> lines=new ArrayList<>();
                 for(int i=0;i<renderer.getPageCount();i++) {
