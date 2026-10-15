@@ -95,6 +95,9 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
+          # The unbundled OCR model needs a Google Play services delivery path.
+          # Use the official Play Store image in this EXPERIMENT only.
+          target: google_apis_playstore
           arch: x86_64
           profile: pixel_2
           disable-animations: true
