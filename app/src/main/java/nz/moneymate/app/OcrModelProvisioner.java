@@ -33,7 +33,7 @@ final class OcrModelProvisioner {
     static void ensureReady(Source source,Clock clock) throws Exception {
         final long hardDeadline=clock.now()+240000L;
         long deadline=clock.now()+120000L,generation=source.generation();
-        int internalRetries=0,serviceRestarts=0;
+        int internalRetries=0,serviceRestarts=0,requestTimeouts=0;
         for(int attempt=0;attempt<4;attempt++) {
             Installation installation=null;boolean serviceChanged=false;
             try {
@@ -57,6 +57,12 @@ final class OcrModelProvisioner {
                 if(!serviceChanged && (failure.code!=8 || internalRetries++>=2))throw failure;
             }catch(InterruptedException interrupted){
                 throw interrupted;
+            }catch(TimeoutException stalledRequest){
+                serviceChanged=changed(source,generation);
+                // An individual Play services Task can stall before the overall
+                // readiness deadline. Reconnect and recheck availability, rather
+                // than treating a request timeout as a permanently missing model.
+                if(!serviceChanged && (++requestTimeouts>2 || clock.now()>=deadline))throw stalledRequest;
             }catch(Exception failure){
                 // In-flight Tasks can time out during replacement without a
                 // terminal install callback. Recover only a verified change.

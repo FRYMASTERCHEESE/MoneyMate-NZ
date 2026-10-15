@@ -13,7 +13,7 @@ public class OcrModelProvisionerTest {
             assertTrue(millis>0);time+=millis;
         }
     }
-    private static final class Source implements OcrModelProvisioner.Source {
+    private static class Source implements OcrModelProvisioner.Source {
         final Clock clock; final int[] errors; final long readyAt;
         int attempts,closed,reconnections; long changeAt=Long.MAX_VALUE,lastInstallGeneration; boolean requestFailure,preinstalled,replaceDuringRequest;
         public long generation(){return clock.time>=changeAt?2L:1L;}
@@ -57,6 +57,26 @@ public class OcrModelProvisionerTest {
         Clock clock=new Clock();Source source=new Source(clock,0L,0);source.preinstalled=true;
         OcrModelProvisioner.ensureReady(source,clock);
         assertEquals(0,source.attempts);assertEquals(0,source.closed);assertEquals(0L,clock.time);
+    }
+    @Test public void stalledInstallRequestReconnectsWithinExistingDeadline() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,0L,0){
+            @Override public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                if(reconnections==0){clock.time+=timeout;throw new TimeoutException("stalled install request");}
+                return super.install(timeout);
+            }
+        };
+        OcrModelProvisioner.ensureReady(source,clock);
+        assertEquals(1,source.reconnections);assertEquals(1,source.closed);assertTrue(clock.time<120000L);
+    }
+    @Test public void repeatedRequestTimeoutsAreBoundedWithoutServiceReplacement() throws Exception {
+        Clock clock=new Clock();final int[] requests={0};
+        Source source=new Source(clock,Long.MAX_VALUE,0){
+            @Override public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                requests[0]++;clock.time+=timeout;throw new TimeoutException("stalled install request");
+            }
+        };
+        try{OcrModelProvisioner.ensureReady(source,clock);fail("Timed out requests treated as ready");}
+        catch(TimeoutException expected){assertEquals(3,requests[0]);assertEquals(2,source.reconnections);assertTrue(clock.time<=120000L);}
     }
     @Test public void transientFailureRetriesButNeverReturnsBeforeModelIsAvailable() throws Exception {
         Clock clock=new Clock();Source source=new Source(clock,4000L,8,0);

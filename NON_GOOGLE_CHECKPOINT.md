@@ -24,3 +24,11 @@ This continuation leaves the existing Google OAuth flow, chooser, configuration 
 - Cloud synchronization remains opt-in and stops on conflicting edits, preserving both copies. No automatic conflict merging was introduced.
 
 No Supabase configuration, auth URL, live database, user records, secrets, testers, billing, domain or paid services were changed. This draft is not merged or deployed.
+
+## Mobile-to-mobile and OCR follow-up
+
+- Added an Android instrumentation test with two isolated SQLite databases representing phones signed into the same synthetic account. It exercises AuthClient and CloudSync against an in-memory revision-checked service, including transactions, budgets, goals, bills, recurring records, edits, deletion and preservation of conflicting offline edits. This is not a real two-device production test.
+- Android CI for 1e0bd2c passed five of six jobs, including debug/optimized verification on API 35 and 36. One repeated optimized API 36 cold-start run failed when a Play services OCR installation request timed out before the overall model-readiness deadline.
+- OCR provisioning now reconnects after individual Task timeouts, with at most two timeout retries inside the existing deadline. Availability must still be confirmed before importing; permanent errors and overall expiry still fail closed.
+- 35 Java unit tests pass locally, including model provisioning and bounded timeout regressions. 86 JavaScript tests pass. New Android instrumentation/CI execution is pending for this follow-up.
+- Google Console was opened in the existing MoneyMate NZ project (our-voice-452820-c3), but its Branding form did not load. No branding, verification, client credentials or production settings were changed. Google documents brand verification as necessary to display the app name; submission requires the user's approval.
