@@ -28,6 +28,7 @@ final class GoogleOAuth {
             throw new IllegalStateException("Could not save Google sign-in challenge.");
         Uri destination=Uri.parse(BuildConfig.SUPABASE_URL+"/auth/v1/authorize").buildUpon()
             .appendQueryParameter("provider","google")
+            .appendQueryParameter("prompt","select_account")
             .appendQueryParameter("redirect_to",CALLBACK)
             .appendQueryParameter("code_challenge",challenge)
             .appendQueryParameter("code_challenge_method","s256").build();

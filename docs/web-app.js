@@ -732,6 +732,7 @@ async function signInWithGoogle(){
  sessionStorage.setItem(GOOGLE_PKCE_KEY,verifier);
  const address=new URL(config.url+"/auth/v1/authorize");
  address.searchParams.set("provider","google");
+ address.searchParams.set("prompt","select_account");
  address.searchParams.set("redirect_to",redirect);
  address.searchParams.set("code_challenge",toBase64Url(digest));
  address.searchParams.set("code_challenge_method","s256");
@@ -739,15 +740,21 @@ async function signInWithGoogle(){
 }
 async function finishGoogleSignin(){
  const params=new URLSearchParams(location.search),code=params.get("code");
- if(!code)return;
+ const failure=params.get("error")||new URLSearchParams(location.hash.slice(1)).get("error");
+ if(!code&&!failure)return;
  const verifier=sessionStorage.getItem(GOOGLE_PKCE_KEY);
  sessionStorage.removeItem(GOOGLE_PKCE_KEY);
  history.replaceState(null,"",location.pathname+(location.hash||""));
- if(!verifier){toast("Google sign-in session expired. Start again from Account.");return;}
+ if(failure){
+  history.replaceState(null,"",location.pathname+"#account");
+  await restoreLogin();navigate("account");
+  toast("Google sign-in was cancelled or denied. Your existing records are unchanged. Try again from Account.");return;
+ }
+ if(!verifier){await restoreLogin();navigate("account");toast("Google sign-in session expired. Start again from Account.");return;}
  try {
   const session=await authApi("/auth/v1/token?grant_type=pkce","POST",{auth_code:code,code_verifier:verifier});
   await attachSession(session);navigate("account");
- }catch(error){errorMessage(error);}
+ }catch(error){await restoreLogin();navigate("account");errorMessage(error);}
 }
 
 
@@ -942,7 +949,7 @@ async function bootstrap(){
    if(!/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(obj.url)||!/^sb_publishable_[A-Za-z0-9_-]+$/.test(obj.publishableKey))throw Error();
    config=obj;if(page==="account")render();
   }catch{if(page==="account")render();}
-  if(new URLSearchParams(location.search).has("code"))await finishGoogleSignin();
+  if(new URLSearchParams(location.search).has("code")||new URLSearchParams(location.search).has("error")||new URLSearchParams(location.hash.slice(1)).has("error"))await finishGoogleSignin();
   else await restoreLogin();
   if("serviceWorker" in navigator)navigator.serviceWorker.register("./sw.js").catch(()=>{});
  }catch(error){
