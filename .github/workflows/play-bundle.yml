@@ -45,7 +45,7 @@ jobs:
         with:
           gradle-version: '8.13'
       - name: Unit tests and production signed AAB
-        run: gradle --no-daemon :app:testDebugUnitTest :app:bundleRelease
+        run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:lintRelease :app:bundleRelease
       - name: Verify signed Android App Bundle
         shell: bash
         run: |
@@ -73,6 +73,23 @@ jobs:
             exit 1
           fi
           unzip -t "$AAB" >/dev/null
+          unzip -Z1 "$AAB" > "$RUNNER_TEMP/signed-bundle-entries.txt"
+          if grep -E '[.]so
+          sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
+          echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MoneyMate-NZ-Signed-Play-AAB
+          path: |
+            app/build/outputs/bundle/release/*.aab
+            app/build/outputs/bundle/release/*.sha256
+            app/build/outputs/mapping/release/
+          retention-days: 7
+ "$RUNNER_TEMP/signed-bundle-entries.txt"; then
+            echo '::error::Signed bundle contains native libraries; OCR experiment release gate failed.'
+            exit 1
+          fi
+          echo 'Verified signed bundle contains no native shared libraries.'
           sha256sum "$AAB" > app/build/outputs/bundle/release/app-release.aab.sha256
           echo 'Signed AAB verified; upload manually to Google Play Console after final review.'
       - uses: actions/upload-artifact@v4
