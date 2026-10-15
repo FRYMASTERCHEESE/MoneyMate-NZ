@@ -1,17 +1,17 @@
-# Google sign-in branding and verification
+# Google sign-in and session reliability (free Supabase setup)
 
-This change requests Google account selection on web and Android, handles browser OAuth cancellation/denial, and restores the previous saved login after an unsuccessful callback. It preserves existing project configuration, PKCE, session storage, application ID and signing setup.
+Keep the existing Supabase project URL, free plan, public client configuration, Auth users, financial data, package ID, signing keys and testers. Do not purchase domains, upgrade plans, enable billing or add paid services.
 
-Google's account chooser branding has NOT been verified or fixed by this code change. The app name/logo must be configured and, where required, verified in the existing Google Auth Platform project. To replace the Supabase callback hostname, Supabase supports a custom domain on a paid plan with a paid add-on. An owner-controlled domain and DNS verification are required. Do not invent a domain or replace the Supabase project.
+The existing website root and Android moneymatenz://auth/callback return URLs are the intended callbacks. Retain them in Supabase's redirect allowlist and retain the existing project's /auth/v1/callback URI in the existing Google web OAuth client. Google and email login share the canonical Supabase user ID and session vault, not email-derived database names.
 
-Before activating a custom domain, add its /auth/v1/callback URL to the existing Google web OAuth client alongside the original Supabase callback. Preserve client IDs, secrets, audience and testers. Supabase documents that the original project domain continues working after custom-domain activation, so existing clients do not inherently need an Android release for this dashboard change.
+This change requests Google account selection on web and Android; handles browser OAuth cancellation/denial; restores the previous saved login after unsuccessful callbacks; and prevents temporary browser-storage read failures from deleting the saved login. Existing encrypted Android and IndexedDB website session storage remain in place.
 
-Validate the actual Google chooser after changing branding/domain settings. A successful sign-in that skips the chooser does not verify the displayed name. Preserve Auth UUIDs; do not merge users based only on an email address.
+Google chooser branding is NOT fixed or verified by this code. Free Google Auth Platform branding/verification may provide an app name/logo where Google supports it. Keep the Supabase hostname; a custom auth domain is outside the approved scope. Do not claim that changing a button label or Supabase project name changes Google's chooser.
 
-Validation: 75 JavaScript regression tests pass, including PKCE account selection, callback success, query/fragment cancellation, missing verifier, exchange failure, persistent vault storage, profile isolation and cloud conflict tests. These are automated tests with mocked provider responses, not proof of live Android or Google behavior.
+Validation: 84 JavaScript tests pass locally. Session restoration tests exercise saved login, expired-token rotation, offline restoration, transient vault errors, revocation, identity mismatch and concurrent refresh in one page. OAuth tests exercise PKCE, account selection, success, cancellation, missing verifier and failed exchange. Existing profile isolation and sync conflict tests also pass.
 
-Before release: run Android CI and real-device tests for Google/email login, restart, token refresh, callback delivery, switching accounts, logout, offline reconnect, two-device sync and conflict preservation using synthetic records. Existing logout uses global scope and may sign other devices out. No Android release is included in this change.
+An Android instrumentation test now checks Google PKCE login, encrypted-vault reopening, expired refresh-token rotation and reopening again with the rotated token. It uses synthetic transport responses; Android CI must pass before treating this test as verified.
 
-References:
-- https://supabase.com/docs/guides/auth/social-login/auth-google
-- https://supabase.com/docs/guides/platform/custom-domains
+Release gate: real email-password login, Google chooser, Android process restart/deep-link delivery, account switching, logout, offline reconnect and two-device cloud sync still need end-to-end verification with synthetic records. Global logout currently signs other devices out. No release, production deployment or data migration is part of this PR.
+
+Reference: https://supabase.com/docs/guides/auth/social-login/auth-google

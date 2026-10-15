@@ -563,7 +563,7 @@ async function accessToken(){
 async function restoreLogin(){
  let saved;
  try{saved=await loadLoginSession();}catch{
-  await clearLoginSession().catch(()=>{});
+  // A temporary IndexedDB failure must not erase a valid saved login.
   return;
  }
  if(!saved||auth)return;
