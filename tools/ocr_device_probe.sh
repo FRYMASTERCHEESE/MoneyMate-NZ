@@ -39,6 +39,13 @@ snapshot after
 kill "$log_pid" 2>/dev/null || echo 'Diagnostic logcat process already stopped' >&2
 wait "$log_pid" 2>/dev/null || :
 cat "${prefix}-gradle.txt"
+# Summaries are diagnostic only; the saved test exit status remains authoritative.
+for phase in before after; do
+  echo "Play services $phase:"
+  grep -E 'versionCode=|versionName=|lastUpdateTime=' "${prefix}-${phase}-com.google.android.gms.txt" || echo 'No version metadata captured'
+done
+echo 'OCR and Play services lifecycle events:'
+grep -E 'MoneyMateOcr|started: syntheticPdf|finished: syntheticPdf|failed: syntheticPdf|OCR model|Force stopping com.google.android.gms.*(installPackageLI|pkg removed)|Package com.google.android.gms updated, version' "${prefix}-logcat.txt" || echo 'No matching diagnostic lifecycle events captured'
 printf '%s\n' "$test_status" > "${prefix}-exit-status.txt"
 # Preserve the real test result, including timeouts and module-install failures.
 exit "$test_status"

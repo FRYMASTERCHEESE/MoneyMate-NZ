@@ -10,6 +10,9 @@ import android.os.ParcelFileDescriptor;
 import android.os.SystemClock;
 import com.google.android.gms.common.moduleinstall.ModuleInstall;
 import com.google.android.gms.common.moduleinstall.ModuleInstallRequest;
+import com.google.android.gms.common.moduleinstall.ModuleInstallClient;
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusCodes;
+import com.google.android.gms.common.api.ApiException;
 import com.google.android.gms.common.moduleinstall.InstallStatusListener;
 import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate;
 import com.google.android.gms.tasks.Tasks;
@@ -25,7 +28,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.concurrent.ExecutionException;
 
 /** Private, on-device OCR of the PDF pages selected by the Android document picker.
  * Uses Android PdfRenderer + Google Play services on-device Latin text recognition.
@@ -41,42 +45,61 @@ public final class PdfStatementReader {
     /** Never read financial PDFs before the optional on-device OCR model is ready.
      * This runs on PdfImport's background worker, not the Android UI thread.
      */
-    private static void waitForOcrModel(Context context, TextRecognizer recognizer) throws Exception {
-        final var client=ModuleInstall.getClient(context);
-        final AtomicInteger state=new AtomicInteger(0);
-        final AtomicInteger errorCode=new AtomicInteger(0);
-        final InstallStatusListener listener=update->{
-            errorCode.set(update.getErrorCode());
-            state.set(update.getInstallState());
-        };
-        try {
-            if(Tasks.await(client.areModulesAvailable(recognizer),12,TimeUnit.SECONDS)
-                    .areModulesAvailable())return;
-            // A successful request only starts delivery. Observe terminal failures
-            // and verify availability; never treat request acceptance as OCR readiness.
-            Tasks.await(client.installModules(ModuleInstallRequest.newBuilder()
-                    .addApi(recognizer).setListener(listener).build()),20,TimeUnit.SECONDS);
-            final long deadline=SystemClock.elapsedRealtime()+TimeUnit.MINUTES.toMillis(2);
-            while(SystemClock.elapsedRealtime()<deadline){
-                int installState=state.get();
-                if(installState==ModuleInstallStatusUpdate.InstallState.STATE_FAILED)
-                    throw new IllegalStateException("OCR model installation failed (code "+errorCode.get()+"). Check Google Play services and your connection, then retry. No records were added.");
-                if(installState==ModuleInstallStatusUpdate.InstallState.STATE_CANCELED)
-                    throw new IllegalStateException("OCR model installation was cancelled. Retry the PDF import. No records were added.");
-                if(Tasks.await(client.areModulesAvailable(recognizer),8,TimeUnit.SECONDS)
-                        .areModulesAvailable())return;
-                Thread.sleep(1000L);
+    private static <T> T moduleResult(com.google.android.gms.tasks.Task<T> task,long timeout) throws Exception {
+        try{return Tasks.await(task,timeout,TimeUnit.MILLISECONDS);}
+        catch(ExecutionException failed){
+            Throwable cause=failed.getCause();
+            if(cause instanceof ApiException){
+                int code=((ApiException)cause).getStatusCode();
+                android.util.Log.w("MoneyMateOcr","Model service error: "+code+" "+ModuleInstallStatusCodes.getStatusCodeString(code));
+                throw new OcrModelProvisioner.Failure(code,"OCR model service failed (code "+code+", "+ModuleInstallStatusCodes.getStatusCodeString(code)+"). No records were added.",cause);
             }
-            throw new IllegalStateException("OCR model is not ready yet. Keep an internet connection and retry the PDF import. No records were added.");
+            throw failed;
+        }
+    }
+    private static void waitForOcrModel(Context context, TextRecognizer recognizer) throws Exception {
+        try {
+            OcrModelProvisioner.ensureReady(new OcrModelProvisioner.Source(){
+                private final ModuleInstallClient client=ModuleInstall.getClient(context);
+                public boolean available(long timeout) throws Exception {
+                    return moduleResult(client.areModulesAvailable(recognizer),timeout).areModulesAvailable();
+                }
+                public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                    // A new listener per request keeps old-session callbacks from
+                    // contaminating a retry after Play services replaces itself.
+                    final AtomicReference<ModuleInstallStatusUpdate> latest=new AtomicReference<>();
+                    final InstallStatusListener listener=latest::set;
+                    try {
+                        moduleResult(client.installModules(ModuleInstallRequest.newBuilder()
+                                .addApi(recognizer).setListener(listener).build()),timeout);
+                    }catch(Exception failed){client.unregisterListener(listener);throw failed;}
+                    return new OcrModelProvisioner.Installation(){
+                        public OcrModelProvisioner.Failure failure(){
+                            ModuleInstallStatusUpdate update=latest.get();
+                            if(update==null)return null;
+                            if(update.getInstallState()==ModuleInstallStatusUpdate.InstallState.STATE_CANCELED)
+                                return new OcrModelProvisioner.Failure(16,"OCR model installation was cancelled. No records were added.",null);
+                            if(update.getInstallState()!=ModuleInstallStatusUpdate.InstallState.STATE_FAILED)return null;
+                            int code=update.getErrorCode();
+                            android.util.Log.w("MoneyMateOcr","Model install error: "+code+" "+ModuleInstallStatusCodes.getStatusCodeString(code)+", session="+update.getSessionId());
+                            return new OcrModelProvisioner.Failure(code,"OCR model installation failed (code "+code+", "+ModuleInstallStatusCodes.getStatusCodeString(code)+", session "+update.getSessionId()+"). No records were added.",null);
+                        }
+                        public void close(){client.unregisterListener(listener);}
+                    };
+                }
+            },new OcrModelProvisioner.Clock(){
+                public long now(){return SystemClock.elapsedRealtime();}
+                public void sleep(long millis) throws InterruptedException {Thread.sleep(millis);}
+            });
         }catch(InterruptedException interrupted){
             Thread.currentThread().interrupt();
             throw new IllegalStateException("OCR setup was interrupted. No records were added.",interrupted);
-        }catch(IllegalStateException alreadyClear){
-            throw alreadyClear;
+        }catch(OcrModelProvisioner.Failure failed){
+            throw new IllegalStateException(failed.getMessage(),failed);
+        }catch(java.util.concurrent.TimeoutException timeout){
+            throw new IllegalStateException("OCR model is not ready yet. Keep an internet connection and retry the PDF import. No records were added.",timeout);
         }catch(Exception unavailable){
             throw new IllegalStateException("Google Play services OCR is unavailable. Check Google Play services and connect to the internet, then retry. No records were added.",unavailable);
-        }finally{
-            client.unregisterListener(listener);
         }
     }
 

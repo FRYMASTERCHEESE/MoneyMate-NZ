@@ -28,7 +28,7 @@ final class PdfImport {
                 final String label=nickname.getText().toString().trim();
                 if(!owner.equals(currentOwner.get())){error(activity,"Profile changed. Choose the PDF again.");return;}
                 final AlertDialog progress=new AlertDialog.Builder(activity)
-                    .setMessage("Reading PDF locally on this phone. Please wait...").setCancelable(false).create();
+                    .setMessage("Preparing PDF text recognition on this phone. First use may need internet to download the text model. Your PDF stays on this phone. Please wait...").setCancelable(false).create();
                 progress.show();
                 final Uri uri=selected.getData();
                 new Thread(()->{
