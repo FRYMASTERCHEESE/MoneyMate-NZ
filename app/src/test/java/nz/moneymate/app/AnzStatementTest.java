@@ -37,6 +37,21 @@ public class AnzStatementTest {
         assertEquals("2025-12-31",rows.get(0).date);
         assertEquals("2026-01-01",rows.get(1).date);
     }
+    @Test public void impossibleDatesNeverSilentlyMoveToAnotherDay() {
+        for(String day:Arrays.asList("29 Feb 2025","30 Feb 2024","31 Apr 2024")) {
+            try {
+                String year=day.substring(day.length()-4);
+                AnzStatement.toCsv(Arrays.asList("Statement period 01 Jan "+year+" - 31 Dec "+year,
+                    "Date Transaction type and details Withdrawals Deposits Balance",
+                    "Opening balance 100.00",day+" Coffee 5.00 95.00"));
+                fail("Impossible date accepted");
+            } catch(IllegalArgumentException expected){}
+        }
+        String csv=AnzStatement.toCsv(Arrays.asList("Statement period 01 Feb 2024 - 29 Feb 2024",
+            "Date Transaction type and details Withdrawals Deposits Balance",
+            "Opening balance 100.00","29 Feb Coffee 5.00 95.00"));
+        assertTrue(csv.contains("2024-02-29"));
+    }
     @Test public void rejectsBalanceMismatchOrMissingPeriod() {
         List<List<String>> bad=Arrays.asList(
             Arrays.asList("Date Transaction type and details Withdrawals Deposits Balance","01 Sep Opening balance 100.00","02 Sep Coffee 5.00 95.00"),

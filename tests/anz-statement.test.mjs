@@ -27,6 +27,14 @@ test("ANZ NZ unsigned withdrawal/deposit columns reconciled with opening and run
  assert.equal(repeat.toAdd.length,0);
  assert.equal(repeat.skipped,3);
 });
+
+test("ANZ rejects impossible calendar dates and accepts a real leap day",()=>{
+ const table=(year,row)=>[`Statement period 01 Jan ${year} - 31 Dec ${year}`,
+  "Date Transaction type and details Withdrawals Deposits Balance","Opening balance 100.00",row+" Coffee 5.00 95.00"];
+ for(const [year,date] of [[2025,"29 Feb 2025"],[2024,"30 Feb 2024"],[2024,"31 Apr 2024"]])
+  assert.throws(()=>anzNzdStatementToCsv(table(year,date)));
+ assert.match(anzNzdStatementToCsv(table(2024,"29 Feb 2024")),/2024-02-29/);
+});
 test("ANZ statement period resolves date without year across December-January boundary",()=>{
  const csv=anzNzdStatementToCsv([
   "Statement period 01 Dec 2025 - 31 Jan 2026",

@@ -23,7 +23,8 @@ public final class AnzStatement {
     private static final Pattern DATE=Pattern.compile("^(\\d{1,2})\\s+([A-Za-z]{3})\\s+(?:(\\d{4})\\s+)?");
     private static final Pattern PAIR=Pattern.compile("\\s("+MONEY+")\\s+("+MONEY+")\\s*$",Pattern.CASE_INSENSITIVE);
     private static final Pattern LAST_MONEY=Pattern.compile("("+MONEY+")\\s*$",Pattern.CASE_INSENSITIVE);
-    private static final DateTimeFormatter FULL=DateTimeFormatter.ofPattern("d MMM uuuu",Locale.ENGLISH);
+    private static final DateTimeFormatter FULL=DateTimeFormatter.ofPattern("d MMM uuuu",Locale.ENGLISH)
+        .withResolverStyle(java.time.format.ResolverStyle.STRICT);
     private static String cleaned(String s){return s==null?"":s.trim().replaceAll("\\s+"," ");}
     private static String quoted(String s){return "\""+s.replace("\"","\"\"")+"\"";}
     private static LocalDate date(String day,String month,String year){
