@@ -7,8 +7,11 @@ import android.graphics.Rect;
 import android.graphics.pdf.PdfRenderer;
 import android.net.Uri;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import com.google.android.gms.common.moduleinstall.ModuleInstall;
 import com.google.android.gms.common.moduleinstall.ModuleInstallRequest;
+import com.google.android.gms.common.moduleinstall.InstallStatusListener;
+import com.google.android.gms.common.moduleinstall.ModuleInstallStatusUpdate;
 import com.google.android.gms.tasks.Tasks;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.Text;
@@ -22,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /** Private, on-device OCR of the PDF pages selected by the Android document picker.
  * Uses Android PdfRenderer + Google Play services on-device Latin text recognition.
@@ -39,19 +43,31 @@ public final class PdfStatementReader {
      */
     private static void waitForOcrModel(Context context, TextRecognizer recognizer) throws Exception {
         final var client=ModuleInstall.getClient(context);
+        final AtomicInteger state=new AtomicInteger(0);
+        final AtomicInteger errorCode=new AtomicInteger(0);
+        final InstallStatusListener listener=update->{
+            errorCode.set(update.getErrorCode());
+            state.set(update.getInstallState());
+        };
         try {
             if(Tasks.await(client.areModulesAvailable(recognizer),12,TimeUnit.SECONDS)
                     .areModulesAvailable())return;
-            // Asks Google Play services to fetch the model; this call does NOT
-            // mean download has finished. Check availability again before OCR.
+            // A successful request only starts delivery. Observe terminal failures
+            // and verify availability; never treat request acceptance as OCR readiness.
             Tasks.await(client.installModules(ModuleInstallRequest.newBuilder()
-                    .addApi(recognizer).build()),20,TimeUnit.SECONDS);
-            for(int attempt=0;attempt<12;attempt++){
+                    .addApi(recognizer).setListener(listener).build()),20,TimeUnit.SECONDS);
+            final long deadline=SystemClock.elapsedRealtime()+TimeUnit.MINUTES.toMillis(2);
+            while(SystemClock.elapsedRealtime()<deadline){
+                int installState=state.get();
+                if(installState==ModuleInstallStatusUpdate.InstallState.STATE_FAILED)
+                    throw new IllegalStateException("OCR model installation failed (code "+errorCode.get()+"). Check Google Play services and your connection, then retry. No records were added.");
+                if(installState==ModuleInstallStatusUpdate.InstallState.STATE_CANCELED)
+                    throw new IllegalStateException("OCR model installation was cancelled. Retry the PDF import. No records were added.");
                 if(Tasks.await(client.areModulesAvailable(recognizer),8,TimeUnit.SECONDS)
                         .areModulesAvailable())return;
-                Thread.sleep(2500L);
+                Thread.sleep(1000L);
             }
-            throw new IllegalStateException("OCR model is still downloading. Connect to Wi-Fi and retry the PDF import. No records were added.");
+            throw new IllegalStateException("OCR model is not ready yet. Keep an internet connection and retry the PDF import. No records were added.");
         }catch(InterruptedException interrupted){
             Thread.currentThread().interrupt();
             throw new IllegalStateException("OCR setup was interrupted. No records were added.",interrupted);
@@ -59,8 +75,11 @@ public final class PdfStatementReader {
             throw alreadyClear;
         }catch(Exception unavailable){
             throw new IllegalStateException("Google Play services OCR is unavailable. Check Google Play services and connect to the internet, then retry. No records were added.",unavailable);
+        }finally{
+            client.unregisterListener(listener);
         }
     }
+
     public static List<String> read(Context context, Uri uri) throws Exception {
         if(uri==null)throw new IllegalArgumentException("Choose a PDF statement");
         File privateCopy=File.createTempFile("bank-statement-",".pdf",context.getCacheDir());
