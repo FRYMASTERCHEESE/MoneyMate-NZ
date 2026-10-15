@@ -5,7 +5,7 @@ permissions:
   contents: read
 jobs:
   signed-bundle:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/release/closed-alpha-14'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -50,6 +50,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Match the existing Play Console upload certificate; never rotate keys here.
+          keytool -exportcert -keystore "$MONEYMATE_RELEASE_KEYSTORE_PATH" \
+            -storepass:env MONEYMATE_RELEASE_STORE_PASSWORD \
+            -alias "$MONEYMATE_RELEASE_KEY_ALIAS" -file "$RUNNER_TEMP/upload-cert.der"
+          echo "782b34c18bdc621285d0b59378c79cfd30e1ab7b5aae3d933e62ab01c50f0658  $RUNNER_TEMP/upload-cert.der" | sha256sum --check
           AAB=app/build/outputs/bundle/release/app-release.aab
           test -s "$AAB"
           # The upload certificate is deliberately self-signed. Trust only the
