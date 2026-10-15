@@ -66,7 +66,9 @@ jobs:
             echo "::notice::No native symbol archive generated. Bundled Google ML Kit OCR may already be stripped by its publisher; cannot manufacture missing debug data."
           fi
           echo "Native libraries present in the release bundle:"
-          unzip -Z1 app/build/outputs/bundle/release/app-release.aab | grep '^base/lib/.*\\.so
+          unzip -Z1 app/build/outputs/bundle/release/app-release.aab | grep -F '.so' || true
+      - name: Verify production release refuses missing protected configuration
+        run: |
           if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
             echo '::error::Production gate unexpectedly allowed missing release configuration'; exit 1
           fi
