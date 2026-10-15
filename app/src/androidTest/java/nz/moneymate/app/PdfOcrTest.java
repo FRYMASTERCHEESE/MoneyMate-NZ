@@ -13,9 +13,47 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import static org.junit.Assert.*;
 
-/** Exercise bundled ML Kit/JNI after R8, using only a generated statement. */
+/** Exercise Play services OCR after R8, using only generated statements. */
 @RunWith(AndroidJUnit4.class)
 public class PdfOcrTest {
+    @Test public void syntheticAnzPdfReconcilesAndReimportDoesNotDuplicate() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        File file=File.createTempFile("synthetic-anz-", ".pdf",context.getCacheDir());
+        String owner="77777777-7777-4777-8777-777777777777";
+        context.deleteDatabase(Store.databaseName(owner));
+        try {
+            PdfDocument document=new PdfDocument();
+            try {
+                PdfDocument.Page page=document.startPage(new PdfDocument.PageInfo.Builder(1200,700,1).create());
+                page.getCanvas().drawColor(Color.WHITE);
+                Paint paint=new Paint(Paint.ANTI_ALIAS_FLAG);paint.setColor(Color.BLACK);paint.setTextSize(24);
+                String[] lines={"ANZ Bank New Zealand Limited", "Statement period 10 Sep 2024 - 09 Dec 2024",
+                    "Date Transaction type and details Withdrawals Deposits Balance",
+                    "10 Sep Opening balance 9,656.67", "10 Sep AP Transfer from family 5.00 9,661.67",
+                    "10 Sep EP Countdown NZ 7.00 9,654.67", "11 Sep Fuel BP 7.95 9,646.72"};
+                for(int i=0;i<lines.length;i++)page.getCanvas().drawText(lines[i],40,70+i*75,paint);
+                document.finishPage(page);
+                try(FileOutputStream out=new FileOutputStream(file)){document.writeTo(out);}
+            }finally{document.close();}
+            java.util.List<String> lines=PdfStatementReader.read(context,Uri.fromFile(file));
+            assertTrue("OCR must recognise the ANZ table",AnzStatement.matches(lines));
+            java.util.List<BankCsv.Entry> rows=BankCsv.parse(PdfStatement.toCsv(lines),"Synthetic ANZ");
+            assertEquals(3,rows.size());
+            assertEquals("Income",rows.get(0).kind);assertEquals(500L,rows.get(0).cents);
+            assertEquals("2024-09-10",rows.get(0).date);
+            try(Store store=new Store(context,owner)) {
+                store.importBankCsv(rows,false);
+                assertEquals(500L,store.sum("Income","2024-09"));
+                assertEquals(1495L,store.sum("Expense","2024-09"));
+                String backup=store.backupJson();store.restoreJson(backup);
+                assertEquals(3,store.importBankCsv(rows,false).skipped);
+                assertEquals(backup,store.backupJson());
+            }
+        }finally {
+            context.deleteDatabase(Store.databaseName(owner));
+            if(file.exists())assertTrue(file.delete());
+        }
+    }
     @Test public void syntheticPdfOcrImportsAndRoundTripsWithoutDuplicates() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         File file=File.createTempFile("synthetic-statement-", ".pdf", context.getCacheDir());
