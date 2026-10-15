@@ -34,7 +34,8 @@ final class OcrModelProvisioner {
         final long hardDeadline=clock.now()+240000L;
         long deadline=clock.now()+120000L,generation=source.generation();
         int internalRetries=0,serviceRestarts=0,requestTimeouts=0;
-        for(int attempt=0;attempt<4;attempt++) {
+        for(int attempt=0;attempt<8;attempt++) {
+            long retryDelay=2500L;
             Installation installation=null;boolean serviceChanged=false;
             try {
                 checkGeneration(source,generation);
@@ -54,7 +55,13 @@ final class OcrModelProvisioner {
                 serviceChanged=changed(source,generation);
                 // Retry only documented INTERNAL_ERROR (8), or a verified
                 // package-version change. Permanent errors still fail closed.
-                if(!serviceChanged && (failure.code!=8 || internalRetries++>=2))throw failure;
+                if(!serviceChanged) {
+                    if(failure.code!=8 || internalRetries++>=4)throw failure;
+                    // A freshly replaced service can answer requests before its
+                    // module installer is ready. Give it time to settle instead
+                    // of exhausting every retry within a few seconds.
+                    retryDelay=Math.min(20000L,5000L << (internalRetries-1));
+                }
             }catch(InterruptedException interrupted){
                 throw interrupted;
             }catch(TimeoutException stalledRequest){
@@ -79,7 +86,7 @@ final class OcrModelProvisioner {
                 deadline=Math.min(hardDeadline,clock.now()+120000L);
             }
             source.reconnect();
-            clock.sleep(remaining(clock,deadline,2500L));
+            clock.sleep(remaining(clock,deadline,retryDelay));
         }
         throw timeout();
     }

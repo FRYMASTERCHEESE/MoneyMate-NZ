@@ -88,11 +88,36 @@ public class OcrModelProvisionerTest {
         OcrModelProvisioner.ensureReady(source,clock);
         assertEquals(2,source.attempts);assertEquals(1,source.closed);assertTrue(clock.time>=4000L);
     }
-    @Test public void repeatedInternalFailuresStopAfterThreeRequests() throws Exception {
+    @Test public void repeatedInternalFailuresStopAfterFiveRequests() throws Exception {
         Clock clock=new Clock();Source source=new Source(clock,Long.MAX_VALUE,8);
         try{OcrModelProvisioner.ensureReady(source,clock);fail("Repeated failure accepted");}
         catch(OcrModelProvisioner.Failure expected){assertEquals(8,expected.code);}
-        assertEquals(3,source.attempts);assertEquals(3,source.closed);
+        assertEquals(5,source.attempts);assertEquals(5,source.closed);
+        assertEquals(55000L,clock.time);
+    }
+    @Test public void replacementInstallerGetsTimeToSettleBeforeRetryBudgetIsSpent() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,0L,0){
+            @Override public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                if(clock.time<30000L) {
+                    attempts++;
+                    throw new OcrModelProvisioner.Failure(8,"installer still starting",null);
+                }
+                return super.install(timeout);
+            }
+        };
+        OcrModelProvisioner.ensureReady(source,clock);
+        assertEquals(4,source.attempts);assertEquals(35000L,clock.time);
+        assertEquals(1,source.closed);
+    }
+    @Test public void internalErrorBackoffCannotExtendReadinessDeadline() throws Exception {
+        Clock clock=new Clock();Source source=new Source(clock,Long.MAX_VALUE,8){
+            @Override public OcrModelProvisioner.Installation install(long timeout) throws Exception {
+                clock.time+=timeout;return super.install(timeout);
+            }
+        };
+        try{OcrModelProvisioner.ensureReady(source,clock);fail("Deadline extended");}
+        catch(TimeoutException expected){assertEquals(120000L,clock.time);}
+        assertEquals(source.attempts,source.closed);
     }
     @Test public void permanentAndCancelledFailuresAreNotRetried() throws Exception {
         for(int error:new int[]{16,46000,46001,46002,46003,46004}) {
