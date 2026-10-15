@@ -34,10 +34,6 @@ test('successful callback exchanges PKCE exactly once and clears the verifier',a
  assert.equal(h.requests[0][0],'/auth/v1/token?grant_type=pkce');assert.equal(h.requests[0][2].code_verifier,'test-verifier');assert.equal(h.urls[0],'/MoneyMate-NZ/');
 });
 
-
-
-
-
 test('expired verifier restores the saved account without exchanging a code',async()=>{
  const h=harness('?code=synthetic-code','',{missingVerifier:true});await h.api.finish();
  assert.equal(h.restored,1);assert.equal(h.requests.length,0);assert.match(h.messages[0],/expired/);

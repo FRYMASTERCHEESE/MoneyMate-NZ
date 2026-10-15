@@ -189,8 +189,6 @@ function accountPage(){
  return html;
 }
 
-
-
 function bankingPage(){
  return heading("Bank connections","Import NZD bank statements free, or check future NZ and Australian automatic bank connections.")
   +'<section class="panel"><h2>Free NZD statement imports · CSV or PDF</h2><p>Choose a bank CSV or text-based PDF statement downloaded from your bank. Neither needs a bank connection or paid provider. PDF extraction happens in your browser; PDF.js code downloads when you use it, and the file is never uploaded to a PDF service.</p><p class="muted">NZD only: AUD files are blocked until separate Australian-dollar budgets are supported. We suggest categories automatically, skip recognisable duplicate rows and ask before adding anything. Use the same account nickname when re-importing. Never upload bank passwords.</p><div class="btns">'+btn("Choose bank CSV file","bank-csv","primary")+btn("Choose bank PDF file","bank-pdf","secondary")+btn("Save a JSON backup","backup","secondary")+'</div></section>'
@@ -757,8 +755,6 @@ async function finishGoogleSignin(){
  }catch(error){await restoreLogin();navigate("account");errorMessage(error);}
 }
 
-
-
 async function dbSyncMeta(id,write) {
  const db=await dbOpen();
  try {
@@ -921,9 +917,6 @@ document.addEventListener("visibilitychange",()=>{
  if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
 });
 
-
-
-
 window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
 setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
 async function copyGuest(){
@@ -935,7 +928,6 @@ async function copyGuest(){
  await save(original);
  toast("Guest records copied safely. The original guest profile was not changed.");
 }
-
 
 async function bootstrap(){
  try{

@@ -15,4 +15,3 @@ Before release: run Android CI and real-device tests for Google/email login, res
 References:
 - https://supabase.com/docs/guides/auth/social-login/auth-google
 - https://supabase.com/docs/guides/platform/custom-domains
-
