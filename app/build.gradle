@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 12
-        versionName '0.3.8'
+        versionCode 13
+        versionName '0.3.9'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -91,7 +91,7 @@ android {
 }
 dependencies {
     implementation 'androidx.activity:activity:1.10.1'
-    implementation 'com.google.mlkit:text-recognition:16.0.1' // bundled, on-device Latin OCR; no per-bank fees
+    implementation 'com.google.android.gms:play-services-mlkit-text-recognition:19.0.1' // Google Play services on-device OCR; model must download first
     implementation 'com.google.android.gms:play-services-ads:24.5.0'
     implementation 'com.google.android.ump:user-messaging-platform:3.2.0'
     testImplementation 'junit:junit:4.13.2'
@@ -105,12 +105,12 @@ tasks.register('verifyReleaseConfiguration') {
     doLast {
         def release = android.buildTypes.release
         assert android.defaultConfig.applicationId == 'nz.moneymate.app'
-        assert android.defaultConfig.versionCode == 12
-        assert android.defaultConfig.versionName == '0.3.8'
+        assert android.defaultConfig.versionCode == 13
+        assert android.defaultConfig.versionName == '0.3.9'
         assert release.minifyEnabled && release.shrinkResources
         assert release.proguardFiles.contains(file('proguard-rules.pro'))
         assert !release.proguardFiles.contains(file('proguard-instrumentation.pro'))
         assert productionRelease ? release.signingConfig == android.signingConfigs.production : release.signingConfig == null
-        println 'Verified MoneyMate 0.3.8 (12), production package, R8/resource shrinking, isolated test rules and gated signing.'
+        println 'Verified MoneyMate 0.3.9 (13), production package, R8/resource shrinking, isolated test rules and gated signing.'
     }
 }

@@ -53,6 +53,18 @@ jobs:
           MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
           MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
         run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
+      - name: Check experiment bundles no native code
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          unzip -Z1 "$AAB" > "$RUNNER_TEMP/bundle-entries.txt"
+          if grep -E '^base/lib/.*[.]so$' "$RUNNER_TEMP/bundle-entries.txt"; then
+            echo "::error::Native shared libraries still bundled. Do not deploy."
+            exit 1
+          fi
+          echo "No bundled native libraries. Requires independent Play Console verification."
       - name: Verify production release refuses missing protected configuration
         run: |
           if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
@@ -83,13 +95,16 @@ jobs:
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: ${{ matrix.api-level }}
+          # The unbundled OCR model needs a Google Play services delivery path.
+          # Use the official Play Store image in this EXPERIMENT only.
+          target: google_apis_playstore
           arch: x86_64
           profile: pixel_2
           disable-animations: true
           script: |
             mkdir -p screenshots
-            timeout --kill-after=15 300 gradle --no-daemon :app:connectedDebugAndroidTest || { timeout 30 adb logcat -d > screenshots/debug-logcat.txt; exit 1; }
-            timeout --kill-after=15 300 gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:connectedR8TestAndroidTest || { timeout 30 adb logcat -d > screenshots/r8test-logcat.txt; exit 1; }
+            bash tools/ocr_device_probe.sh debug sequence
+            bash tools/ocr_device_probe.sh r8Test sequence
             mkdir -p screenshots
             adb pull /sdcard/Download/moneymate-screenshots/. screenshots/
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > screenshots/apk-certificate.txt
@@ -117,6 +132,129 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: moneymate-android-build-api-${{ matrix.api-level }}
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/bundle/release/*.aab
+
+  optimized-cold:
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [35, 36]
+        fresh-run: [1, 2]
+    runs-on: ubuntu-latest
+    env:
+      MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
+      MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        run: |
+          export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -name sdkmanager | head -n 1)"
+          test -n "$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platforms;android-36" "build-tools;36.0.0"
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.13'
+      - name: Restore persistent test signing key
+        env:
+          TEST_KEYSTORE: ${{ secrets.MONEYMATE_TEST_KEYSTORE }}
+        run: |
+          if [ -n "$TEST_KEYSTORE" ]; then
+            printf '%s' "$TEST_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/moneymate-test.p12"
+            chmod 600 "$RUNNER_TEMP/moneymate-test.p12"
+            echo "MONEYMATE_TEST_KEYSTORE_PATH=$RUNNER_TEMP/moneymate-test.p12" >> "$GITHUB_ENV"
+            keytool -list -keystore "$RUNNER_TEMP/moneymate-test.p12" -storetype PKCS12 -storepass android -alias androiddebugkey
+          else
+            echo 'Signing secret unavailable: this run uses an ephemeral debug key.'
+          fi
+      - name: Run tests and build debug APK
+        env:
+          MONEYMATE_SUPABASE_URL: ${{ vars.MONEYMATE_SUPABASE_URL }}
+          MONEYMATE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.MONEYMATE_SUPABASE_PUBLISHABLE_KEY }}
+        run: gradle --no-daemon :app:verifyReleaseConfiguration :app:testDebugUnitTest :app:testReleaseUnitTest :app:assembleDebug :app:bundleRelease
+      - name: Check experiment bundles no native code
+        shell: bash
+        run: |
+          set -euo pipefail
+          AAB="app/build/outputs/bundle/release/app-release.aab"
+          test -s "$AAB"
+          unzip -Z1 "$AAB" > "$RUNNER_TEMP/bundle-entries.txt"
+          if grep -E '^base/lib/.*[.]so$' "$RUNNER_TEMP/bundle-entries.txt"; then
+            echo "::error::Native shared libraries still bundled. Do not deploy."
+            exit 1
+          fi
+          echo "No bundled native libraries. Requires independent Play Console verification."
+      - name: Verify production release refuses missing protected configuration
+        run: |
+          if MONEYMATE_PRODUCTION_RELEASE=true gradle --no-daemon help > "$RUNNER_TEMP/production-gate.txt" 2>&1; then
+            echo '::error::Production gate unexpectedly allowed missing release configuration'; exit 1
+          fi
+          grep -q 'A Play release requires your real AdMob app ID' "$RUNNER_TEMP/production-gate.txt"
+          if MONEYMATE_PRODUCTION_RELEASE=true MONEYMATE_ADMOB_APP_ID='ca-app-pub-1111111111111111~1111111111' MONEYMATE_ADMOB_BANNER_ID='ca-app-pub-1111111111111111/1111111111' gradle --no-daemon help > "$RUNNER_TEMP/signing-gate.txt" 2>&1; then
+            echo '::error::Production gate unexpectedly allowed missing signing configuration'; exit 1
+          fi
+          grep -q 'Missing production signing configuration: MONEYMATE_RELEASE_KEYSTORE_PATH' "$RUNNER_TEMP/signing-gate.txt"
+      - name: Require clean release lint
+        run: gradle --no-daemon :app:lintRelease
+      - name: Build optimised instrumentation APKs before starting emulator
+        run: gradle --no-daemon -PmoneymateTestBuildType=r8Test :app:assembleR8Test :app:assembleR8TestAndroidTest
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Run all JavaScript regression tests
+        run: |
+          npm ci --ignore-scripts
+          npm test
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Verify optimized build alone on a clean Play Store emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          target: google_apis_playstore
+          arch: x86_64
+          profile: pixel_2
+          force-avd-creation: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot -wipe-data
+          disable-animations: true
+          script: bash tools/ocr_device_probe.sh r8Test cold
+      - name: Check release obfuscation evidence
+        run: |
+          test -s app/build/outputs/mapping/release/mapping.txt
+          test -s app/build/outputs/mapping/release/configuration.txt
+          test -s app/build/outputs/mapping/release/usage.txt
+          python3 tools/r8_report.py
+      - name: Upload Android screenshots and test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneymate-optimized-cold-api-${{ matrix.api-level }}-run-${{ matrix.fresh-run }}
+          path: |
+            screenshots/
+            app/build/reports/androidTests/
+            app/build/reports/tests/
+            app/build/reports/lint-results-release*
+            app/build/outputs/mapping/release/
+            app/build/outputs/mapping/r8Test/
+            app/build/reports/r8-summary.json
+      - name: Upload test APK and unsigned release AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: moneymate-cold-build-api-${{ matrix.api-level }}-run-${{ matrix.fresh-run }}
           path: |
             app/build/outputs/apk/debug/*.apk
             app/build/outputs/bundle/release/*.aab
