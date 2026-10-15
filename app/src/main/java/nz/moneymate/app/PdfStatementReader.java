@@ -22,7 +22,8 @@ import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 /** Private, on-device OCR of the PDF pages selected by the Android document picker.
- * Uses Android PdfRenderer + the bundled Google ML Kit Latin text model.
+ * Uses Android PdfRenderer + Google Play services on-device Latin text recognition.
+ * Model provisioning needs a network connection once; downloaded models can run offline.
  * Do not log/retain financial statement contents or send it to a remote server.
  */
 public final class PdfStatementReader {
