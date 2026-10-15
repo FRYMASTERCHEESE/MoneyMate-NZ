@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 test("offline cache refreshes on points retirement without resetting browser data",()=>{
  assert.equal(read("sw.js"),read("docs/sw.js"));
- assert.match(read("docs/sw.js"),/moneymate-nz-web-v12-auth-errors/);
+ assert.match(read("docs/sw.js"),/moneymate-nz-web-v13-anz-leap-day/);
  assert.match(read("docs/sw.js"),/caches\.delete\(key\)/);
 });
 test("published website paths match and show no points UI",()=>{

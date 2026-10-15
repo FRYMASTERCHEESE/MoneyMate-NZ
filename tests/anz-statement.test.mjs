@@ -45,6 +45,15 @@ test("ANZ statement period resolves date without year across December-January bo
  ]);
  assert.deepEqual(planBankCsv(csv).toAdd.map(x=>x.date),["2025-12-31","2026-01-01"]);
 });
+
+test("yearless ANZ leap day resolves across years without accepting impossible dates",()=>{
+ const base=["Statement period 01 Dec 2023 - 29 Feb 2024",
+  "Date Transaction type and details Withdrawals Deposits Balance","Opening balance 100.00"];
+ const csv=anzNzdStatementToCsv([...base,"29 Feb Coffee 5.00 95.00"]);
+ assert.equal(planBankCsv(csv).toAdd[0].date,"2024-02-29");
+ for(const date of ["30 Feb","29 Feb 2023"])
+  assert.throws(()=>anzNzdStatementToCsv([...base,date+" Coffee 5.00 95.00"]));
+});
 test("ANZ carried-forward page balances are checked, not imported",()=>{
  const csv=anzNzdStatementToCsv([
   "Statement period 01 Oct 2026 - 31 Oct 2026",

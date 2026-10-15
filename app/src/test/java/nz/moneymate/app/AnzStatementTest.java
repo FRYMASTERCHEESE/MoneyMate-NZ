@@ -61,4 +61,14 @@ public class AnzStatementTest {
         for(List<String> lines:bad)try{PdfStatement.toCsv(lines);fail("Balance or period should be rejected");}
         catch(IllegalArgumentException expected){}
     }
+    @Test public void yearlessLeapDayResolvesAcrossStatementYears() {
+        List<String> lines=Arrays.asList("Statement period 01 Dec 2023 - 29 Feb 2024",
+            "Date Transaction type and details Withdrawals Deposits Balance",
+            "Opening balance 100.00","29 Feb Coffee 5.00 95.00");
+        assertTrue(AnzStatement.toCsv(lines).contains("2024-02-29"));
+        for(String invalid:Arrays.asList("30 Feb Coffee 5.00 95.00","29 Feb 2023 Coffee 5.00 95.00")) {
+            try{AnzStatement.toCsv(Arrays.asList(lines.get(0),lines.get(1),lines.get(2),invalid));fail("Impossible date accepted");}
+            catch(IllegalArgumentException expected){}
+        }
+    }
 }
