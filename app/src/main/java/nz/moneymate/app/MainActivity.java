@@ -174,13 +174,13 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
-            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;case "Admin": admin();break;default: home();
+            case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Statements": banking();break;case "Help": help();break;case "Admin": admin();break;default: home();
         }
         HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
         LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.HORIZONTAL);
         final View[] selectedTab=new View[1];
         java.util.List<String> navigation=new java.util.ArrayList<>(java.util.Arrays.asList(
-            "Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"));
+            "Home","Transactions","Budgets","Goals","Bills","Export","Account","Statements","Help"));
         if(isVerifiedAdmin())navigation.add("Admin");
         for(String tab:navigation) {
             Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
@@ -620,16 +620,12 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
 
 
     private void banking(){
-        title("Bank connections · NZ & Australia");
-        line("Free NZD bank statement imports are available from CSV or PDF files. PDF text recognition runs on your device, but some layouts may fail. Neither requires a bank login inside MoneyMate NZ or provider fees.");
-        content.addView(button("Import NZD bank statement CSV",()->chooseBankCsv()));
-        content.addView(button("Import NZD bank statement PDF (free)",()->chooseBankPdf()));
-        line("ANZ NZ statements with Withdrawals / Deposits / Balance can be checked using running balances. ASB, BNZ, Westpac, Kiwibank, TSB, SBS, The Co-operative Bank, Heartland, Rabobank and other NZ bank PDFs may work when the transaction table is clear, but each bank layout still needs real-world testing.");
-        line("Automatic bank connections are NOT LIVE. AUD statement imports are blocked until separate AUD budgets are available.");
-        line("New Zealand: accredited Akahu open banking. Australia: Basiq Consumer Data Right. Both require approved provider onboarding before people can connect.");
-        content.addView(button("About Akahu (NZ)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.akahu.nz/")))));
-        content.addView(button("About Basiq (Australia)",()->startActivity(new Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.basiq.io/")))));
-        line("Never enter banking passwords in MoneyMate NZ. Future consent will be read-only and revocable. AUD amounts must stay separate from NZD until currency conversion is supported.");
+        title("Import statements · NZD");
+        line("Import NZD CSV or PDF files you downloaded from your own bank. MoneyMate NZ does not connect to bank accounts, offer automatic downloads or require a bank-data subscription.");
+        content.addView(button("Import NZD statement CSV (free)",()->chooseBankCsv()));
+        content.addView(button("Import NZD statement PDF (free)",()->chooseBankPdf()));
+        line("ANZ NZ statements with Withdrawals / Deposits / Balance can be checked using running balances. Other NZ bank PDFs may work when the transaction table is clear, but each layout still needs real-world testing.");
+        line("Always check amounts and dates in the preview before confirming. NZD only; Australian-dollar statements are not supported. No banking credentials are needed.");
     }
     /** Simple in-app guide. Accessible without an account or network. */
     private void help(){
@@ -640,7 +636,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         title("2. Add income or expenses");
         line("Home or Transactions → + Income / + Expense. Choose a category, enter the amount in NZD, and save the entry. Home displays monthly income, spending and balance.");
         title("3. Import a bank CSV or PDF for free");
-        line("Download a NZD CSV or PDF statement from your bank. In Banking choose Import bank CSV or Import bank PDF. Use a consistent nickname, but never your actual bank account number. For PDFs, check every amount, date and transaction direction in the preview. This never connects to your bank or automatically downloads transactions.");
+        line("Download a NZD CSV or PDF statement from your bank. In Statements choose Import NZD statement CSV or Import NZD statement PDF. Use a consistent nickname, but never your actual bank account number. For PDFs, check every amount, date and transaction direction in the preview. This never connects to your bank or automatically downloads transactions.");
         line("Only NZD files are supported; AUD is blocked. PDF recognition can fail on scanned or complex layouts and must be checked against the original. Save a JSON backup before a large import. Duplicate detection is best-effort.");
         title("4. Plan with budgets and goals");
         line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
@@ -649,7 +645,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         title("6. Back up and restore safely");
         line("Export → Backup all data (JSON) preserves your current profile. Export CSV saves transaction rows for spreadsheets. Restore full backup (JSON) REPLACES existing profile records; bank CSV import only ADDS new transactions.");
         title("7. Help and privacy");
-        line("Automatic live bank connections are not yet available. For login or syncing problems, retry online and check the same account on both devices. Never share a bank password, account token, or financial export publicly.");
+        line("MoneyMate NZ does not offer bank account linking or paid provider subscriptions. For login or syncing problems, retry online and check the same account on both devices. Never share a bank password, account token, or financial export publicly.");
         content.addView(button("Open full help guide on website",()->startActivity(new Intent(
             Intent.ACTION_VIEW,android.net.Uri.parse("https://frymastercheese.github.io/MoneyMate-NZ/help.html")))));
         content.addView(button("Read privacy policy",()->startActivity(new Intent(
