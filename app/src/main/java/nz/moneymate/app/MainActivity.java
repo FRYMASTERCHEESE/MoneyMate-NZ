@@ -694,7 +694,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
                     .setNegativeButton("Cancel",null)
                     .setPositiveButton("Use cloud copy",(e,t)->restoreCloudCopy()).show()).show()));
             content.addView(button("Sign out",()->new AlertDialog.Builder(this).setTitle("Sign out?")
-                .setMessage("Your account records remain on this device and are hidden until you sign in again. The separate local profile will open. If offline, this device still signs out; remote sessions may remain active.")
+                .setMessage("Sign out of this device only. Your other devices stay signed in. Your account records remain here and are hidden until you sign in again. The separate local profile will open. If offline, this device signs out but its server session cannot be revoked yet.")
                 .setNegativeButton("Cancel",null).setPositiveButton("Sign out",(d,w)->accountTask(()->auth.signout(),()->{switchProfile();},true)).show()));
             if(store.isEmpty())content.addView(button("Import existing local records",()->new AlertDialog.Builder(this).setTitle("Copy local records into this account?")
                 .setMessage("This copies all records from the original local profile into this empty account profile. The original local records remain intact. Only import records that belong to you.")

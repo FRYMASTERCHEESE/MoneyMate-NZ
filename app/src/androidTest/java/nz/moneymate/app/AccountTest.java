@@ -143,6 +143,31 @@ public class AccountTest {
         client.signin("test@example.invalid","secret");assertEquals(A,client.userId());
         try{client.signout();fail("Expected offline error");}catch(java.io.IOException expected){}assertNull(client.userId());
     }
+    @Test public void signoutOnlyRevokesTheCurrentDeviceSession() throws Exception {
+        java.util.List<String> calls=new java.util.ArrayList<>();
+        AuthClient client=new AuthClient((path,method,body,bearer)->{
+            calls.add(path);
+            if(path.contains("grant_type=password"))return session(A);
+            assertEquals("/auth/v1/logout?scope=local",path);
+            assertEquals("access",bearer);return new JSONObject();
+        });
+        client.signin("synthetic@example.invalid","synthetic password");client.signout();
+        assertNull(client.userId());assertTrue(calls.contains("/auth/v1/logout?scope=local"));
+        assertFalse(calls.contains("/auth/v1/logout?scope=global"));
+    }
+    @Test public void refreshIdentityMismatchLocksTheOriginalAccountWithoutSavingOtherCredentials() throws Exception {
+        SessionVault vault=new SessionVault(context());vault.clear();
+        try {
+            AuthClient.Transport fake=(path,method,body,bearer)->{
+                if(path.contains("grant_type=password"))return session(A).put("expires_at",1);
+                if(path.contains("grant_type=refresh_token"))return session(B);
+                fail("Mismatched credentials must not reach account endpoints");return null;
+            };
+            AuthClient client=new AuthClient(context(),fake);client.signin("synthetic@example.invalid","synthetic password");
+            String original=vault.read();assertFalse(client.validateOnline());
+            assertEquals(A,client.userId());assertEquals(original,vault.read());
+        }finally{vault.clear();}
+    }
     @Test public void recoveryDoesNotReplaceActiveIdentityAndUsesScopedOtp() throws Exception {
         java.util.List<String> calls=new java.util.ArrayList<>();
         AuthClient client=new AuthClient((path,method,body,bearer)->{calls.add(path);if(path.contains("grant_type=password"))return session(A);if(path.endsWith("verify")){assertEquals("recovery",body.getString("type"));return session(B);}return new JSONObject();});
@@ -193,7 +218,7 @@ public class AccountTest {
             AuthClient.Transport fake=(path,method,body,bearer)->{
                 if(path.contains("grant_type=password"))return session(A);
                 if(path.equals("/auth/v1/user"))return new JSONObject().put("id",A);
-                if(path.contains("/logout?scope=global"))return new JSONObject();
+                if(path.contains("/logout?scope=local"))return new JSONObject();
                 throw new java.io.IOException("Unexpected request");
             };
             AuthClient login=new AuthClient(c,fake);

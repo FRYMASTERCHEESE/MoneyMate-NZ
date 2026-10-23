@@ -65,7 +65,7 @@ final class AuthClient {
         if(session==null)throw new IOException("Sign in again");
         if(session.getLong("expires_at")<=System.currentTimeMillis()/1000+60) {
             JSONObject refreshed=transport.call("/auth/v1/token?grant_type=refresh_token","POST",new JSONObject().put("refresh_token",session.getString("refresh_token")),null);
-            if(!userId().equals(refreshed.getJSONObject("user").getString("id")))throw new IOException("Session identity changed");
+            if(!userId().equals(refreshed.getJSONObject("user").getString("id")))throw new HttpFailure(401,"Session identity changed");
             save(refreshed);
         }
         return session.getString("access_token");
@@ -94,7 +94,7 @@ final class AuthClient {
             new JSONObject().put("auth_code",code).put("code_verifier",verifier),null));
     }
     void signout() throws Exception {
-        try{transport.call("/auth/v1/logout?scope=global","POST",new JSONObject(),accessToken());}finally{clear();}
+        try{transport.call("/auth/v1/logout?scope=local","POST",new JSONObject(),accessToken());}finally{clear();}
     }
     void deleteAccount(String password) throws Exception {
         // Reauthenticate without replacing the current session; server checks the password too.

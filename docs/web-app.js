@@ -638,8 +638,8 @@ async function signout(){
  if(!auth)return;
  await withBusy(async()=>{
   if(!confirm("Sign out? Your account records will stay on this browser and remain hidden until you sign in again."))return;
-  try{await authApi("/auth/v1/logout?scope=global","POST",{},await accessToken());}
-  catch{toast("Signed out locally. Remote sessions might still be active.");}
+  try{await authApi("/auth/v1/logout?scope=local","POST",{},await accessToken());}
+  catch{toast("Signed out of this browser. Its server session could not be revoked while offline.");}
   finally{
    await clearLoginSession().catch(()=>toast("Could not clear saved login. Clear site data on shared devices."));
    adminOverview=null;auth=null;await switchOwner("guest");navigate("account");
