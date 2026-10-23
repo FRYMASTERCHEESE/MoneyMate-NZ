@@ -1,6 +1,6 @@
 # Release candidate update — 24 October 2026
 
-The visual refresh and planning/AdMob changes are now candidate 0.4.0 (14). See `PLAY-RELEASE-0.4.0.md` for the new scope and release checklist. The evidence below records the prior inspected revision; new changes need their own CI run. Local web tests after the refresh: 92 passed.
+The visual refresh and planning/AdMob changes are now candidate 0.4.0 (14). See `PLAY-RELEASE-0.4.0.md` for the new scope and release checklist. The evidence below records the prior inspected revision; new changes need their own CI run. Local web tests after the refresh: 93 passed.
 
 # MoneyMate NZ release verification — 24 October 2026
 

@@ -223,7 +223,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         TextView amount=text(MoneyMath.format(MoneyMath.remaining(in,out)),38,true);amount.setTextColor(Color.WHITE);balance.addView(amount);
         TextView note=text("Recorded income minus expenses · not your bank balance",12,false);note.setTextColor(0xffd1e6db);balance.addView(note);
         TextView totals=text("Income  "+MoneyMath.format(in)+"\nSpent    "+MoneyMath.format(out),16,false);totals.setTextColor(Color.WHITE);balance.addView(totals);content.addView(balance);
-        if(in==0&&out==0)empty("Welcome to your money plan","Start with your income, then add expenses as you go. Your financial records stay on this device.");
+        if(in==0&&out==0)empty("Welcome to your money plan","Start with your income, then add expenses as you go. Records are saved on this device; optional account sync also stores a cloud copy.");
         content.addView(button("+ Add income",()->transactionForm("Income")));
         content.addView(button("+ Add expense",()->transactionForm("Expense")));
         long[] plan=store.monthlyPlan(month());
