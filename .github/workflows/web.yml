@@ -1,6 +1,7 @@
 name: MoneyMate NZ web tests
 on:
   push:
+    branches: [main]
     paths:
       - 'docs/**'
       - 'tests/**'

@@ -20,7 +20,7 @@ const feature=`<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500"
 </svg>`;
 (async()=>{
  fs.writeFileSync(path.join(repo,'store-assets/feature-graphic.svg'),feature);
- await sharp(Buffer.from(square)).resize(512,512).flatten({background:'#0b302b'}).png().toFile(path.join(repo,'store-assets/play-icon-512.png'));
+ await sharp(Buffer.from(square)).resize(512,512).flatten({background:'#0b302b'}).ensureAlpha(1).png().toFile(path.join(repo,'store-assets/play-icon-512.png'));
  await sharp(Buffer.from(feature)).flatten({background:'#0b302b'}).png().toFile(path.join(repo,'store-assets/feature-graphic-1024x500.png'));
  if(path.resolve(out)!==path.join(repo,'store-assets')) for(const name of ['play-icon-512.png','feature-graphic-1024x500.png'])fs.copyFileSync(path.join(repo,'store-assets',name),path.join(out,name));
  console.log('Exported opaque 512×512 icon and 1024×500 Play feature graphic.');
