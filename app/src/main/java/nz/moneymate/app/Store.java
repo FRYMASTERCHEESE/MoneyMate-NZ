@@ -136,6 +136,17 @@ public final class Store extends SQLiteOpenHelper {
     public long sum(String kind,String month) {
         try(Cursor c=query("SELECT COALESCE(SUM(cents),0) FROM transactions WHERE kind=? AND substr(date,1,7)=?",kind,month)) { c.moveToFirst(); return c.getLong(0); }
     }
+    /** Budget remainder, unpaid bills this month, complete goals, total goals. */
+    public long[] monthlyPlan(String month) {
+        java.time.YearMonth.parse(month);
+        long remaining=0,bills=0,complete=0,total=0;
+        try(Cursor c=query("SELECT b.cents,COALESCE((SELECT SUM(t.cents) FROM transactions t WHERE t.kind='Expense' AND t.category=b.category AND substr(t.date,1,7)=?),0) FROM budgets b",month)) {
+            while(c.moveToNext())remaining=Math.addExact(remaining,Math.subtractExact(c.getLong(0),c.getLong(1)));
+        }
+        try(Cursor c=query("SELECT cents FROM bills WHERE substr(due,1,7)=?",month)){while(c.moveToNext())bills=Math.addExact(bills,c.getLong(0));}
+        try(Cursor c=query("SELECT saved,target FROM goals")){while(c.moveToNext()){total++;if(c.getLong(0)>=c.getLong(1))complete++;}}
+        return new long[]{remaining,bills,complete,total};
+    }
     public List<String> csvRows() {
         List<String> rows=new ArrayList<>();
         rows.add("Date,Type,Category,Note,Amount NZD");
@@ -168,7 +179,8 @@ public final class Store extends SQLiteOpenHelper {
                 java.time.LocalDate next=java.time.LocalDate.parse(c.getString(5));
                 String frequency=c.getString(6);
                 int safety=0;
-                while(!next.isAfter(today)&&safety++<1200) {
+                while(!next.isAfter(today)) {
+                    if(++safety>1200||created>=10000)throw new IllegalArgumentException("Repeating schedule covers too many dates");
                     ContentValues t=new ContentValues();
                     t.put("kind",c.getString(1));t.put("category",c.getString(2));t.put("note",c.getString(3));
                     t.put("cents",cents);t.put("date",next.toString());

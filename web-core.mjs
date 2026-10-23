@@ -110,3 +110,12 @@ export function csv(data) {
   return ["Date,Type,Category,Note,Amount NZD",...data.transactions.slice().sort((a,b)=>b.date.localeCompare(a.date)||b.id-a.id)
     .map(row=>[row.date,row.kind,row.category,row.note].map(quoted).join(",")+","+(row.cents/100).toFixed(2))].join("\r\n");
 }
+
+/** A planning view, not a bank balance. Unbudgeted spending is shown in cash flow. */
+export function monthlyPlan(data,yyyyMm) {
+ const t=totals(data,yyyyMm),spent=new Map(t.categories);
+ const budgetRemaining=data.budgets.reduce((sum,b)=>sum+b.cents-(spent.get(b.category)||0),0);
+ const bills=data.bills.filter(b=>month(b.due)===yyyyMm);
+ return {budgetRemaining,billsDue:bills.reduce((sum,b)=>sum+b.cents,0),billCount:bills.length,
+   completedGoals:data.goals.filter(g=>g.saved>=g.target).length};
+}

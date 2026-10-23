@@ -1,6 +1,6 @@
 import {planBankCsv} from "./bank-csv.mjs";
 import {pdfStatementToCsv,pdfFileToLines} from "./pdf-statement.mjs";
-import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,csv,CATEGORIES} from "./web-core.mjs";
+import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,monthlyPlan,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 import {decideSync} from "./sync-policy.mjs";
 import {writeProfile} from "./profile-store.mjs";
@@ -20,6 +20,7 @@ let refreshInFlight=null;
 let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
 let profileEpoch=0;
 let financialSaving=false;
+let profileReady=false;
 const editor=$("#editor"),view=$("#view");
 const toast=(message)=>{const el=$("#toast");el.textContent=message;el.classList.add("show");clearTimeout(toastTimer);toastTimer=setTimeout(()=>el.classList.remove("show"),4500);};
 const errorMessage=e=>toast(e&&e.message?e.message:"Something went wrong.");
@@ -61,6 +62,7 @@ async function save(next){
  if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
 }
 async function switchOwner(id){
+ profileReady=false;
  const epoch=++profileEpoch,owner=id||"guest";
  editor.close();
  profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
@@ -69,7 +71,7 @@ async function switchOwner(id){
  const result=recordDue(stored,today());
  if(result.created)await dbWrite(owner,result.data,{expected:stored,current:()=>profileEpoch===epoch});
  if(profileEpoch!==epoch)return;
- data=result.data;searchTerm="";selectedMonth=clockMonth();page="home";render();
+ data=result.data;profileReady=true;searchTerm="";selectedMonth=clockMonth();page="home";render();
 }
 function empty(icon,heading,detail){
  return '<div class="empty"><div class="empty-art" aria-hidden="true">'+icon+'</div><strong>'+escape(heading)+'</strong><span>'+escape(detail)+'</span></div>';
@@ -88,15 +90,18 @@ function monthChange(delta){
  selectedMonth=date.toISOString().slice(0,7);render();
 }
 function home(){
- const t=totals(data,selectedMonth);
+ const t=totals(data,selectedMonth),plan=monthlyPlan(data,selectedMonth);
  const upcoming=data.bills.filter(x=>x.due>=today()).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,5);
  const overdue=data.bills.filter(x=>x.due<today()).sort((a,b)=>a.due.localeCompare(b.due)).slice(0,5);
  const mLabel=new Date(selectedMonth+"-01T12:00:00").toLocaleDateString("en-NZ",{month:"long",year:"numeric"});
- let markup=heading("Your money, made clear","A little clarity. A little more confidence. All amounts in New Zealand dollars.");
+ let markup=heading("Your money, made clear","Small steps. Stronger tomorrows. Your everyday money plan, in NZ dollars.");
  markup+='<div class="section-row"><span class="tag">'+escape(mLabel)+'</span><div class="btns" style="margin:0">'
    +btn("← Previous","month-prev","secondary")+btn("Current month","month-now","secondary")+btn("Next →","month-next","secondary")+'</div></div>';
- markup+='<section class="hero"><p class="eyebrow">AVAILABLE THIS MONTH · NZD</p><div class="balance">'+nzd(t.remaining)+'</div><div class="hero-bottom"><div><span>Income</span><strong>'+nzd(t.income)+'</strong></div><div><span>Expenses</span><strong>'+nzd(t.expense)+'</strong></div><div><span>Entries</span><strong>'+data.transactions.filter(x=>month(x.date)===selectedMonth).length+'</strong></div></div></section>';
+ markup+='<section class="hero"><p class="eyebrow">MONTHLY CASH FLOW · NZD</p><div class="balance">'+nzd(t.remaining)+'</div><p class="hero-note">Recorded income minus expenses · not your bank balance</p><div class="hero-bottom"><div><span>Income</span><strong>'+nzd(t.income)+'</strong></div><div><span>Expenses</span><strong>'+nzd(t.expense)+'</strong></div><div><span>Entries</span><strong>'+data.transactions.filter(x=>month(x.date)===selectedMonth).length+'</strong></div></div></section>';
  markup+='<div class="btns">'+btn("+ Add income","income")+btn("+ Add expense","expense","secondary")+'</div>';
+ markup+='<div class="plan-grid"><section class="plan-card"><span class="plan-icon" aria-hidden="true">▤</span><p>Category budgets</p><strong>'+nzd(plan.budgetRemaining)+'</strong><small>'+ (data.budgets.length?"Remaining across your budgeted categories":"Set a monthly budget to start")+'</small></section>'
+  +'<section class="plan-card"><span class="plan-icon gold" aria-hidden="true">▦</span><p>Bills due this month</p><strong>'+nzd(plan.billsDue)+'</strong><small>'+plan.billCount+' unpaid · not deducted from cash flow</small></section>'
+  +'<section class="plan-card"><span class="plan-icon purple" aria-hidden="true">◎</span><p>Savings goals</p><strong>'+plan.completedGoals+' / '+data.goals.length+'</strong><small>Goals reached · track progress in Goals</small></section></div>';
  markup+='<div class="grid-2"><section class="panel"><h2>Spending categories</h2>';
  if(!t.categories.length)markup+=empty("◉","Make spending visible","Add an expense to see your spending chart.");
  else{
@@ -245,7 +250,8 @@ function render(){
 function navigate(next){
  if(!pages.includes(next))next="home";
  if(next==="admin"&&!(auth&&adminOverview))next="account";
- page=next;location.hash=next;render();window.scrollTo(0,0);
+ for(const menu of document.querySelectorAll(".mobile-more[open]"))menu.open=false;
+ page=next;location.hash=next;render();window.scrollTo(0,0);view.focus();
 }
 function showModal(kind,id=0){
  modalKind=kind;modalTarget=id;
@@ -913,12 +919,22 @@ async function chooseCloudCopy() {
  }catch(error){errorMessage(error);}
  finally{cloudBusy=false;if(cloudPending){cloudPending=false;void syncCloud(false);}}
 }
-document.addEventListener("visibilitychange",()=>{
- if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);
-});
+async function refreshDueEntries() {
+ if(!profileReady||busy||cloudBusy||financialSaving||editor.open)return;
+ try {
+  const result=recordDue(data,today());
+  if(result.created){await save(result.data);toast(result.created+" repeating entries recorded. No bank payments were made.");}
+ }catch(error){errorMessage(error);}
+}
+async function foregroundRefresh(){
+ if(document.visibilityState!=="visible")return;
+ await refreshDueEntries();
+ if(auth&&cloudMeta?.enabled)void syncCloud(false);
+}
+document.addEventListener("visibilitychange",()=>{void foregroundRefresh();});
 
 window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
-setInterval(()=>{if(document.visibilityState==="visible"&&auth&&cloudMeta?.enabled)void syncCloud(false);},45000);
+setInterval(()=>{void foregroundRefresh();},45000);
 async function copyGuest(){
  if(!auth)return;
  if(!localEmpty(data))throw Error("Copy guest records only into an empty account profile. Export a full JSON backup first.");

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {cents,nzd,iso,advance,emptyData,strictData,recordDue,totals,csv} from "../docs/web-core.mjs";
+import {cents,nzd,iso,advance,emptyData,strictData,recordDue,totals,monthlyPlan,csv} from "../docs/web-core.mjs";
 test("NZD integer cents are exact",()=>{
   assert.equal(cents("$1,234.50"),123450);
   assert.equal(cents("0"),0);
@@ -42,4 +42,20 @@ test("Android JSON export round-trips with goals, bills, budgets",()=>{
 test("invalid backups never count as compatible",()=>{
   assert.throws(()=>strictData({format:"Other",version:1}));
   assert.throws(()=>strictData({...emptyData(),recurring:[{id:1,frequency:"Daily"}]}));
+});
+test("monthly plan separates category caps, unpaid bills and goal progress from cash flow",()=>{
+ const data=emptyData();
+ data.budgets=[{category:"Food",cents:10000},{category:"Transport",cents:5000}];
+ data.transactions=[
+  {id:1,kind:"Expense",category:"Food",note:"",date:"2026-10-01",cents:12000},
+  {id:2,kind:"Expense",category:"Other",note:"",date:"2026-10-02",cents:30000},
+  {id:3,kind:"Income",category:"Food",note:"",date:"2026-10-02",cents:50000},
+  {id:4,kind:"Expense",category:"Transport",note:"",date:"2026-09-30",cents:5000}];
+ data.bills=[{id:1,name:"Power",due:"2026-10-31",cents:12345},{id:2,name:"Phone",due:"2026-11-01",cents:5000}];
+ data.goals=[{id:1,name:"Buffer",target:10000,saved:12000},{id:2,name:"Trip",target:10000,saved:1000}];
+ const before=structuredClone(data);
+ assert.deepEqual(monthlyPlan(data,"2026-10"),{budgetRemaining:3000,billsDue:12345,billCount:1,completedGoals:1});
+ assert.equal(totals(data,"2026-10").remaining,8000);
+ assert.deepEqual(data,before);
+ data.budgets.pop();assert.equal(monthlyPlan(data,"2026-10").budgetRemaining,-2000);
 });

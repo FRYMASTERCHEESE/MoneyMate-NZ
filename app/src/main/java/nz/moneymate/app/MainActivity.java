@@ -25,7 +25,16 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         new androidx.activity.OnBackPressedCallback(false) {
             @Override public void handleOnBackPressed() { /* Wait for the account operation. */ }
         };
-    private Store store; private LinearLayout root, content; private AdView ad;
+    private Store store; private LinearLayout root, content, adSlot; private AdView ad;
+    private LinearLayout screenFrame;
+    private Button privacyChoices;
+    private boolean adsInitialized=false,adLoaded=false;
+    private boolean captureMode(){return (BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false);}
+    private void postScheduledEntries(){
+        if(accountBusy||cloudBusy)return;
+        try {if(store.postDueRecurring()>0){show(currentPage);Toast.makeText(this,"Repeating entries recorded. No bank payments were made.",Toast.LENGTH_LONG).show();}}
+        catch(Exception error){Toast.makeText(this,"Repeating entries could not be recorded. Review your schedules in Transactions.",Toast.LENGTH_LONG).show();}
+    }
     private int ink=ThemeConfig.DEFAULT.ink, green=ThemeConfig.DEFAULT.accent;
     private int canvasColor=ThemeConfig.DEFAULT.background, heroColor=ThemeConfig.DEFAULT.hero;
     private String tagline=ThemeConfig.DEFAULT.tagline;
@@ -50,6 +59,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     private final Runnable periodicCloudCheck=new Runnable(){
         @Override public void run() {
             if(!isFinishing()&&!isDestroyed()) {
+                postScheduledEntries();
                 if(auth!=null&&auth.userId()!=null)requestCloudSync(false);
                 cloudTimer.postDelayed(this,45000L);
             }
@@ -62,7 +72,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         try {
             applyTheme(ThemeConfig.parse(getPreferences(MODE_PRIVATE).getString(THEME_KEY,"")));
         }catch(Exception ignored) {applyTheme(ThemeConfig.DEFAULT);}
-        store.postDueRecurring(); show("Home");
+        postScheduledEntries(); show("Home");
         handleGoogleCallback(getIntent());
         if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)))initAds();
     }
@@ -72,6 +82,8 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     }
     @Override protected void onResume() {
         super.onResume();
+        if(ad!=null)ad.resume();
+        postScheduledEntries();
         if(auth.userId()!=null&&AuthClient.configured()&&!accountBusy&&System.currentTimeMillis()-lastAccountCheck>60000L) {
             lastAccountCheck=System.currentTimeMillis();final Store checked=store;
             accountWorker.execute(()->{
@@ -94,7 +106,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
            System.currentTimeMillis()-lastThemeCheck > 60000L) refreshTheme(false);
     }
-    @Override protected void onPause(){cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}
+    @Override protected void onPause(){if(ad!=null)ad.pause();cloudTimer.removeCallbacks(periodicCloudCheck);super.onPause();}
     private void refreshTheme(boolean userRequested) {
         lastThemeCheck=System.currentTimeMillis();
         new Thread(()->{
@@ -163,33 +175,42 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         if(accountBusy)return;
         if("Admin".equals(page)&&!isVerifiedAdmin())page="Account";
         currentPage=page;
-        LinearLayout frame=new LinearLayout(this);frame.setOrientation(LinearLayout.VERTICAL);frame.setBackgroundColor(canvasColor);
+        LinearLayout frame=new LinearLayout(this);screenFrame=frame;privacyChoices=null;frame.setOrientation(LinearLayout.VERTICAL);frame.setBackgroundColor(canvasColor);
         frame.setOnApplyWindowInsetsListener((v,insets)->{v.setPadding(insets.getSystemWindowInsetLeft(),insets.getSystemWindowInsetTop(),insets.getSystemWindowInsetRight(),insets.getSystemWindowInsetBottom());return insets;});
         setContentView(frame);
         ScrollView scroll=new ScrollView(this);scroll.setFillViewport(true);
         frame.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         root=new LinearLayout(this);root.setOrientation(LinearLayout.VERTICAL);root.setPadding(dp(16),dp(12),dp(16),dp(24));scroll.addView(root);
-        TextView brand=text("◈  MoneyMate NZ",24,true);root.addView(brand);
+        LinearLayout brandRow=new LinearLayout(this);brandRow.setGravity(android.view.Gravity.CENTER_VERTICAL);brandRow.setPadding(dp(12),dp(4),dp(12),dp(4));
+        ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.brand_icon);logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        logo.setBackground(surface(heroColor,14));logo.setClipToOutline(true);brandRow.addView(logo,new LinearLayout.LayoutParams(dp(46),dp(46)));
+        TextView brand=text("MoneyMate NZ",24,true);brandRow.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
+        root.addView(brandRow);
         TextView subtitle=text(tagline,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
             case "Goals": goals();break;case "Bills": bills();break;case "Export": exports();break;case "Account": account();break;case "Banking": banking();break;case "Help": help();break;case "Admin": admin();break;default: home();
         }
-        HorizontalScrollView tabs=new HorizontalScrollView(this);tabs.setHorizontalScrollBarEnabled(false);tabs.setBackgroundColor(Color.WHITE);
-        LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.HORIZONTAL);
-        final View[] selectedTab=new View[1];
-        java.util.List<String> navigation=new java.util.ArrayList<>(java.util.Arrays.asList(
-            "Home","Transactions","Budgets","Goals","Bills","Export","Account","Banking","Help"));
-        if(isVerifiedAdmin())navigation.add("Admin");
-        for(String tab:navigation) {
-            Button nav=button(tab,()->show(tab));nav.setBackground(surface(tab.equals(page)?green:Color.WHITE,16));
-            nav.setTextColor(tab.equals(page)?Color.WHITE:ink);nav.setElevation(0);if(tab.equals(page))selectedTab[0]=nav;links.addView(nav,new LinearLayout.LayoutParams(-2,dp(56)));
+        adSlot=new LinearLayout(this);adSlot.setOrientation(LinearLayout.VERTICAL);adSlot.setGravity(android.view.Gravity.CENTER);adSlot.setPadding(dp(16),dp(8),dp(16),dp(16));adSlot.setBackgroundColor(Color.WHITE);
+        frame.addView(adSlot,new LinearLayout.LayoutParams(-1,-2));attachBanner();
+        LinearLayout links=new LinearLayout(this);links.setOrientation(LinearLayout.HORIZONTAL);links.setBackgroundColor(Color.WHITE);links.setPadding(dp(6),dp(6),dp(6),dp(6));
+        String[] destinations={"Home","Transactions","Budgets","Bills","More"};String[] captions={"Home","Activity","Budgets","Bills","More"};
+        for(int i=0;i<destinations.length;i++) {
+            String tab=destinations[i];boolean selected=tab.equals(page)||("More".equals(tab)&&!java.util.Arrays.asList("Home","Transactions","Budgets","Bills").contains(page));
+            Button nav=button(captions[i],()->{if("More".equals(tab))moreSections();else show(tab);});nav.setTextSize(12);nav.setPadding(dp(2),dp(8),dp(2),dp(8));nav.setMinWidth(0);
+            nav.setContentDescription("Transactions".equals(tab)?"Transactions":tab);nav.setBackground(surface(selected?0xffe4f2d9:Color.WHITE,14));nav.setTextColor(selected?0xff22553b:ink);nav.setElevation(0);
+            links.addView(nav,new LinearLayout.LayoutParams(0,dp(52),1));
         }
-        tabs.addView(links);frame.addView(tabs);tabs.post(()->tabs.scrollTo(Math.max(0,selectedTab[0].getLeft()-dp(16)),0));
-        if(ad!=null) {if(ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);root.addView(ad);}
+        frame.addView(links);frame.post(this::loadBannerIfAllowed);
+
         if(ignoreNextAutoSync)ignoreNextAutoSync=false;
         else if(auth.userId()!=null&&System.currentTimeMillis()-lastCloudAttempt>2500L)requestCloudSync(false);
+    }
+    private void moreSections(){
+        java.util.List<String> items=new java.util.ArrayList<>(java.util.Arrays.asList("Goals","Export","Account","Banking","Help"));
+        if(isVerifiedAdmin())items.add("Admin");
+        new AlertDialog.Builder(this).setTitle("Your MoneyMate").setItems(items.toArray(new String[0]),(dialog,which)->show(items.get(which))).setNegativeButton("Close",null).show();
     }
     private void title(String s) {content.addView(text(s,23,true));}
     private void line(String s) { LinearLayout c=card();c.addView(text(s,16,false));content.addView(c); }
@@ -197,13 +218,20 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     private void home() {
         title(YearMonth.now().format(java.time.format.DateTimeFormatter.ofPattern("MMMM yyyy",java.util.Locale.forLanguageTag("en-NZ"))));
         long in=store.sum("Income",month()),out=store.sum("Expense",month());
-        LinearLayout balance=card();balance.setBackground(surface(heroColor,24));
-        TextView label=text("AVAILABLE THIS MONTH · NZD",12,true);label.setTextColor(0xffbce7d6);balance.addView(label);
+        LinearLayout balance=card();android.graphics.drawable.GradientDrawable hero=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{heroColor,0xff206148});hero.setCornerRadius(dp(26));balance.setBackground(hero);
+        TextView label=text("MONTHLY CASH FLOW · NZD",12,true);label.setTextColor(0xffbce7d6);balance.addView(label);
         TextView amount=text(MoneyMath.format(MoneyMath.remaining(in,out)),38,true);amount.setTextColor(Color.WHITE);balance.addView(amount);
+        TextView note=text("Recorded income minus expenses · not your bank balance",12,false);note.setTextColor(0xffd1e6db);balance.addView(note);
         TextView totals=text("Income  "+MoneyMath.format(in)+"\nSpent    "+MoneyMath.format(out),16,false);totals.setTextColor(Color.WHITE);balance.addView(totals);content.addView(balance);
         if(in==0&&out==0)empty("Welcome to your money plan","Start with your income, then add expenses as you go. Your financial records stay on this device.");
         content.addView(button("+ Add income",()->transactionForm("Income")));
         content.addView(button("+ Add expense",()->transactionForm("Expense")));
+        long[] plan=store.monthlyPlan(month());
+        LinearLayout overview=card();overview.addView(text("Your monthly plan",18,true));
+        overview.addView(text("Category budgets remaining   "+MoneyMath.format(plan[0]),15,true));
+        overview.addView(text("Unpaid bills due this month   "+MoneyMath.format(plan[1]),15,false));
+        overview.addView(text("Savings goals reached   "+plan[2]+" / "+plan[3],15,false));
+        overview.addView(text("Budgets cover their categories only. Unpaid bills are not deducted from cash flow.",12,false));content.addView(overview);
         title("Spending categories");
         try(Cursor c=store.query("SELECT category,SUM(cents) FROM transactions WHERE kind='Expense' AND substr(date,1,7)=? GROUP BY category ORDER BY SUM(cents) DESC",month())) {
             if(c.getCount()==0)empty("Make spending visible","Add an expense to see your category breakdown here.");
@@ -439,11 +467,15 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         }));
         content.addView(button("↻ Refresh app colours & text",()->refreshTheme(true)));
         line("Colour and tagline changes published to the MoneyMate NZ website can appear here without a new APK. New features still need an app update.");
-        content.addView(button("Advertising privacy choices",()->{
+        privacyChoices=button("Advertising privacy choices",()->{
             UserMessagingPlatform.showPrivacyOptionsForm(this,error->{
+                if(isFinishing()||isDestroyed())return;
                 if(error!=null)Toast.makeText(this,"Choices unavailable: "+error.getMessage(),Toast.LENGTH_LONG).show();
+                else {if(ad!=null){ad.destroy();ad=null;}adLoaded=false;attachBanner();loadBannerIfAllowed();}
+                updatePrivacyChoices();
             });
-        }));
+        });
+        content.addView(privacyChoices);updatePrivacyChoices();
         line("Backups contain sensitive financial information. Store them securely. Restoring replaces current records.");
     }
     /** The Android document picker reads a statement locally; no file or banking details
@@ -536,7 +568,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     }
     private void switchProfile() {
         adminReport=null;adminReportOwner=null;lastCloudLinkCheck=0L;
-        store.close();store=new Store(this,auth.userId());store.postDueRecurring();show("Account");
+        store.close();store=new Store(this,auth.userId());show("Account");postScheduledEntries();
         if(auth.userId()!=null){
             requestAdminOverview(false);
             attachExistingCloudIfEmpty();
@@ -634,7 +666,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
     /** Simple in-app guide. Accessible without an account or network. */
     private void help(){
         title("How to use MoneyMate NZ");
-        line("MoneyMate NZ helps you track income, expenses, budgets, savings goals and bills. It does not move money or pay bills. Use the navigation tabs at the bottom to open each section.");
+        line("MoneyMate NZ helps you track income, expenses, budgets, savings goals and bills. It does not move money or pay bills. Use the tabs below; More opens Goals, Export, Account, Banking and Help.");
         title("1. Sign in or use a local profile");
         line("Open Account to sign in using Google (when available) or email, or continue without signing in. To enable private cloud sync across devices, use the same account on Android and the website.");
         title("2. Add income or expenses");
@@ -933,19 +965,40 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             }catch(Exception ex){Toast.makeText(this,"Could not read backup: "+ex.getMessage(),Toast.LENGTH_LONG).show();}
         }
     }
+    private void updatePrivacyChoices(){
+        if(privacyChoices!=null)privacyChoices.setVisibility(UserMessagingPlatform.getConsentInformation(this).getPrivacyOptionsRequirementStatus()==ConsentInformation.PrivacyOptionsRequirementStatus.REQUIRED?View.VISIBLE:View.GONE);
+    }
     private void initAds() {
         ConsentRequestParameters params=new ConsentRequestParameters.Builder().build();
         UserMessagingPlatform.getConsentInformation(this).requestConsentInfoUpdate(this,params,
-          ()->UserMessagingPlatform.loadAndShowConsentFormIfRequired(this,error->{
-              if(UserMessagingPlatform.getConsentInformation(this).canRequestAds())loadTestAd();
-          }),
-          error->{if(UserMessagingPlatform.getConsentInformation(this).canRequestAds())loadTestAd();});
+          ()->{
+              if(isFinishing()||isDestroyed())return;
+              updatePrivacyChoices();
+              UserMessagingPlatform.loadAndShowConsentFormIfRequired(this,error->{updatePrivacyChoices();loadBannerIfAllowed();});
+          },error->{updatePrivacyChoices();loadBannerIfAllowed();});
     }
-    private void loadTestAd() {
-        MobileAds.initialize(this,status->{});
-        ad=new AdView(this);ad.setAdSize(AdSize.BANNER);ad.setAdUnitId(BuildConfig.ADMOB_BANNER_ID);
+    private boolean bannerPage(){return java.util.Arrays.asList("Home","Transactions","Budgets","Goals","Bills").contains(currentPage);}
+    private void attachBanner(){
+        if(adSlot==null)return;
+        if(ad!=null&&ad.getParent() instanceof android.view.ViewGroup)((android.view.ViewGroup)ad.getParent()).removeView(ad);
+        adSlot.removeAllViews();adSlot.setVisibility(adLoaded&&bannerPage()?View.VISIBLE:View.GONE);
+        if(adLoaded&&ad!=null&&bannerPage()){
+            TextView label=text("ADVERTISEMENT",10,false);label.setTextColor(0xff617368);label.setGravity(android.view.Gravity.CENTER);label.setPadding(0,0,0,dp(6));adSlot.addView(label);
+            adSlot.addView(ad);
+        }
+    }
+    private void loadBannerIfAllowed() {
+        if(captureMode()||isFinishing()||isDestroyed()||!bannerPage()||!UserMessagingPlatform.getConsentInformation(this).canRequestAds())return;
+        if(!adsInitialized){adsInitialized=true;MobileAds.initialize(this,status->runOnUiThread(this::loadBannerIfAllowed));return;}
+        if(ad!=null||screenFrame==null||screenFrame.getWidth()==0)return;
+        int width=Math.max(1,Math.round((screenFrame.getWidth()-screenFrame.getPaddingLeft()-screenFrame.getPaddingRight()-dp(32))/getResources().getDisplayMetrics().density));
+        ad=new AdView(this);ad.setAdSize(AdSize.getCurrentOrientationAnchoredAdaptiveBannerAdSize(this,width));ad.setAdUnitId(BuildConfig.ADMOB_BANNER_ID);
+        final AdView requested=ad;
+        ad.setAdListener(new AdListener(){
+            @Override public void onAdLoaded(){if(ad==requested&&!isFinishing()&&!isDestroyed()){adLoaded=true;attachBanner();}}
+            @Override public void onAdFailedToLoad(LoadAdError error){if(ad==requested&&!isDestroyed()){adLoaded=false;attachBanner();}}
+        });
         ad.loadAd(new AdRequest.Builder().build());
-        if(root!=null)root.addView(ad);
     }
     @Override protected void onDestroy(){if(ad!=null)ad.destroy();accountWorker.shutdown();store.close();super.onDestroy();}
 }

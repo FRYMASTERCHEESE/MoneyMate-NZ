@@ -20,10 +20,10 @@ function app(){
  return vm.runInContext(source+`
  render=()=>{};
  ({
-  async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);},
+  async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);profileReady=true;},
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
-  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,
+  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus,cloudBusy};}
  })`,context);
@@ -32,6 +32,15 @@ test("rapid repeated Save submissions create exactly one financial entry",async(
  const h=app();await h.init(A,core.emptyData(),null);
  await Promise.all([h.submit(),h.submit()]);
  const saved=await h.read(A);assert.equal(saved.transactions.length,1);assert.equal(saved.transactions[0].cents,1234);
+});
+test("foreground recurrence catch-up is persisted once even with overlapping wakeups",async()=>{
+ const h=app(),data=core.emptyData();
+ const today=new Date(),date=[today.getFullYear(),String(today.getMonth()+1).padStart(2,"0"),String(today.getDate()).padStart(2,"0")].join("-");
+ data.recurring=[{id:1,kind:"Expense",category:"Rent",note:"Scheduled",cents:50000,next_date:date,frequency:"Weekly"}];
+ await h.init(A,data,null);
+ await Promise.all([h.due(),h.due()]);await h.due();
+ const saved=await h.read(A);assert.equal(saved.transactions.length,1);
+ assert.equal(saved.transactions[0].date,date);assert.ok(saved.recurring[0].next_date>date);
 });
 test("late upload completion cannot attach account A's sync metadata to account B",async()=>{
  const h=app(),old=records("old"),fresh=records("edited"),upload=deferred(),started=deferred();
