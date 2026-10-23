@@ -19,11 +19,13 @@ function app(){
  const source=readFileSync(new URL("../docs/web-app.js",import.meta.url),"utf8").replace(/^import .*;\r?\n/gm,"").replace(/^bootstrap\(\);/m,"");
  return vm.runInContext(source+`
  render=()=>{};
+ const performSync=syncCloud;let lastSync=Promise.resolve();
+ syncCloud=(...args)=>lastSync=performSync(...args);
  ({
   async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);profileReady=true;},
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
-  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,
+  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,settled:()=>lastSync,
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus,cloudBusy};}
  })`,context);
@@ -94,8 +96,8 @@ test("two account profiles exchange every financial record type through revision
  await second.sync();assert.deepEqual(core.strictData(await second.read(A)),full);
  const edited=structuredClone(full);edited.goals[0].saved=7000;edited.bills=[];
  await second.save(edited);
- // Saving starts automatic sync; wait for that upload before polling the other device.
- for(let attempts=0;second.state().cloudBusy&&attempts<100;attempts++)await new Promise(setImmediate);
+ // Await the actual upload, rather than assuming a count of event-loop turns is enough.
+ await second.settled();
  assert.equal(second.state().cloudBusy,false);await first.sync();
  assert.equal(cloud.revision,2);assert.deepEqual(core.strictData(await first.read(A)),edited);
 });
