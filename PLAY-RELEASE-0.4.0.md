@@ -15,6 +15,8 @@ Prepared 24 October 2026. Package `nz.moneymate.app`, candidate version code **1
 
 **Name:** MoneyMate NZ
 
+**Support email:** moneymatenzapp@gmail.com (owner-supplied public address; mailbox delivery/monitoring still needs verification)
+
 **Short description:** Plan your NZ dollars. Track spending, budgets, bills and savings goals.
 
 **Full description:**
@@ -41,7 +43,7 @@ New MoneyMate logo and refreshed design. Simpler phone navigation, clearer month
 4. **AdMob:** verify the actual app and banner units are approved, linked to the correct Play app and serving. Configure and publish the applicable consent messages in AdMob Privacy & messaging. Exercise consent acceptance, refusal, changed choices, no-fill, offline and resume on test devices. Never click live ads during testing. Adaptive sizing improves fit; it does not guarantee earnings. [Banner guidance](https://developers.google.com/admob/android/banner), [UMP guidance](https://developers.google.com/admob/android/privacy).
 5. **app-ads.txt:** verify the AdMob publisher ID and the developer website listed in Play. The file must be reachable at the website host root, which for `frymastercheese.github.io` is `/app-ads.txt`, not `/MoneyMate-NZ/app-ads.txt`. The host-root file was checked successfully (HTTP 200) on 24 October 2026 and lists `pub-4051392846058327` as a DIRECT Google seller. Confirm this matches the actual AdMob account and Play developer URL; AdMob dashboard verification remains unverified. No seller record was changed. [Official setup](https://support.google.com/admob/answer/9363762?hl=en).
 6. **App content:** review privacy policy, public deletion URL, content rating, target audience, ads declaration, financial features declaration and Data safety against the final signed app and every included SDK. Optional Supabase account/sync sends email, account identifiers and selected financial records off device; AdMob also processes advertising/device/network data. Do not declare "no data collected". Do not claim end-to-end encryption. [Data safety guidance](https://support.google.com/googleplay/android-developer/answer/10787469?hl=en), [Mobile Ads SDK disclosure guidance](https://developers.google.com/admob/android/privacy/play-data-disclosure).
-7. **Screenshots:** old `store-assets/phone-*.png` and `capture-provenance.json` still identify the previous version until regenerated from this candidate's successful emulator capture. Fresh screenshots must display example data and must match the version submitted. New icon/feature graphic are ready for visual review.
+7. **Screenshots:** old `store-assets/phone-*.png` and `capture-provenance.json` still identify the previous version until regenerated from this candidate's successful emulator capture. Fresh screenshots must display example data and must match the version submitted. New icon/feature graphic are ready for visual review. The icon uses 32-bit RGBA PNG with opaque alpha; the feature graphic uses 24-bit RGB PNG. `tests/play-assets.test.mjs` verifies these Play format requirements.
 8. **Deployment:** keep draft changes separate from live main. After review and merge, compare served website files with the approved commit, then verify the installed signed version. Current draft test success is not a live deployment claim.
 
 ## Cost boundary
