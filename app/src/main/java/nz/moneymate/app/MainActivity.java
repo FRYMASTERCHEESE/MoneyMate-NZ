@@ -187,7 +187,9 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         logo.setBackground(surface(heroColor,14));logo.setClipToOutline(true);brandRow.addView(logo,new LinearLayout.LayoutParams(dp(46),dp(46)));
         TextView brand=text("MoneyMate NZ",24,true);brandRow.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         root.addView(brandRow);
-        TextView subtitle=text(tagline,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
+        String syncLabel=auth.userId()==null?" · Local profile":
+            (CloudSync.metadata(this,auth.userId()).enabled?" · Automatic sync on":" · Sync not enabled");
+        TextView subtitle=text(tagline+syncLabel,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
@@ -719,7 +721,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         title("4. Plan with budgets and goals");
         line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
         title("5. Sync Android with the website");
-        line("First save a JSON backup separately on BOTH devices in Export. Then use the same signed-in account on each. On the first device tap Account → Enable secure cloud sync; wait for confirmation. On the second device also enable sync. Sync happens while online and when edits are saved. If there is a conflict, export both copies first and do not replace data blindly.");
+        line("First save JSON backups on both devices in Export. Sign in with the SAME Google/email account on Android and the website. Android 0.4.1 offers to copy saved Local profile goals into your account and enable automatic sync; the original records stay put. If your signed-in profile already has records, approve the one-time sync prompt or use Account → Enable secure cloud sync. The empty website profile will automatically fetch an existing cloud copy when online. Edits sync while the app/website is open or resumed, without tapping Sync now. Conflicts preserve both copies; never replace either before exporting backups.");
         title("6. Back up and restore safely");
         line("Export → Backup all data (JSON) preserves your current profile. Export CSV saves transaction rows for spreadsheets. Restore full backup (JSON) REPLACES existing profile records; bank CSV import only ADDS new transactions.");
         title("7. Help and privacy");
