@@ -254,8 +254,8 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
                 lookahead.addView(text("On the horizon",15,true));
                 for(int i=0;i<Math.min(6,future.events.size());i++) {
                     FortnightPlan.Event e=future.events.get(i);
-                    String amount=(e.kind.equals("Income")?"+":"−")+MoneyMath.format(e.cents);
-                    lookahead.addView(text(e.date+"  "+e.name+" · "+e.type+"   "+amount,13,false));
+                    String plannedAmount=(e.kind.equals("Income")?"+":"−")+MoneyMath.format(e.cents);
+                    lookahead.addView(text(e.date+"  "+e.name+" · "+e.type+"   "+plannedAmount,13,false));
                 }
                 if(future.events.size()>6)
                     lookahead.addView(text("And "+(future.events.size()-6)+" more planned entries this fortnight.",12,false));
