@@ -814,6 +814,14 @@ async function cloudOnSignin(force=false) {
   // Existing consent on another device allows an EMPTY account profile to join.
   // Never upload financial records or discard populated local profiles silently.
   if(remote.revision>0&&localEmpty(data)&&remote.data){
+   // Do not strand older guest records behind an automatically linked account.
+   // Offer the existing explicit Copy guest records action before linking.
+   const guest=await dbRead("guest");
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   if(!localEmpty(guest)){
+    cloudStatus="Separate local guest records found. Open Account to review Copy guest records before connecting this account to cloud.";
+    render();return;
+   }
    const baseline=strictData(data),restored=strictData(remote.data);
    const hash=await signature(restored);
    if(auth?.user?.id!==owner||profileEpoch!==epoch||JSON.stringify(data)!==JSON.stringify(baseline))return;
