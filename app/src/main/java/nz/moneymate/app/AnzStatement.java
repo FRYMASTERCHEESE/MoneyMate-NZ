@@ -23,7 +23,8 @@ public final class AnzStatement {
     private static final Pattern DATE=Pattern.compile("^(\\d{1,2})\\s+([A-Za-z]{3})\\s+(?:(\\d{4})\\s+)?");
     private static final Pattern PAIR=Pattern.compile("\\s("+MONEY+")\\s+("+MONEY+")\\s*$",Pattern.CASE_INSENSITIVE);
     private static final Pattern LAST_MONEY=Pattern.compile("("+MONEY+")\\s*$",Pattern.CASE_INSENSITIVE);
-    private static final DateTimeFormatter FULL=DateTimeFormatter.ofPattern("d MMM uuuu",Locale.ENGLISH);
+    private static final DateTimeFormatter FULL=DateTimeFormatter.ofPattern("d MMM uuuu",Locale.ENGLISH)
+        .withResolverStyle(java.time.format.ResolverStyle.STRICT);
     private static String cleaned(String s){return s==null?"":s.trim().replaceAll("\\s+"," ");}
     private static String quoted(String s){return "\""+s.replace("\"","\"\"")+"\"";}
     private static LocalDate date(String day,String month,String year){
@@ -80,7 +81,14 @@ public final class AnzStatement {
             if(line.matches("(?i).*\\b(totals?|closing balance|balance at)\\b.*"))continue;
             LocalDate valid=null;
             for(int year:years){
-                LocalDate candidate=date(m.group(1),m.group(2),m.group(3)!=null?m.group(3):Integer.toString(year));
+                LocalDate candidate;
+                try{candidate=date(m.group(1),m.group(2),m.group(3)!=null?m.group(3):Integer.toString(year));}
+                catch(IllegalArgumentException impossible){
+                    // A yearless leap day can be valid in only one year of a
+                    // statement spanning December to February. Try both years.
+                    if(m.group(3)!=null)throw impossible;
+                    continue;
+                }
                 if(!candidate.isBefore(begin)&&!candidate.isAfter(end)){
                     if(valid!=null&&!candidate.equals(valid))
                         throw new IllegalArgumentException("Transaction year is ambiguous");

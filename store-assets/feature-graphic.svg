@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="500" viewBox="0 0 1024 500">
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b302b"/><stop offset="1" stop-color="#1d6248"/></linearGradient></defs>
+<rect width="1024" height="500" fill="url(#bg)"/><circle cx="980" cy="40" r="235" fill="none" stroke="#b8f28b" stroke-opacity=".1" stroke-width="70"/>
+<rect x="64" y="121" width="238" height="238" rx="58" fill="#b8f28b"/>
+<svg x="76" y="133" width="214" height="214" viewBox="0 0 108 108"><defs><clipPath id="round"><rect width="108" height="108" rx="26"/></clipPath></defs><g clip-path="url(#round)"><path fill="#0B302B" d="M0,0H108V108H0Z"/><path fill="#124D40" d="M0,80L108,18V108H0Z"/><path fill="#B8F28B" d="M28,43Q28,37 34,37H74Q80,37 80,43V73Q80,79 74,79H34Q28,79 28,73Z"/><path fill="#E6FFC9" d="M28,43Q28,37 34,37H74Q80,37 80,43V47H28Z"/><path fill="#FFD66D" d="M65,26a10,10 0,1 0,0 20a10,10 0,1 0,0 -20"/><path fill="#0B302B" d="M37,69V51H42L49,60L56,51H61V69H55V60L49,67L43,60V69Z"/><path fill="#20614A" d="M70,52H82V66H70Q66,66 66,62V56Q66,52 70,52Z"/><path fill="#E6FFC9" d="M74,56a3,3 0,1 0,0 6a3,3 0,1 0,0 -6"/></g></svg>
+<text x="350" y="141" font-family="Segoe UI,Arial,sans-serif" font-size="27" font-weight="700" fill="#c7f5a7">MoneyMate NZ</text>
+<text x="346" y="216" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="700" fill="#fff">Your money.</text>
+<text x="346" y="283" font-family="Segoe UI,Arial,sans-serif" font-size="58" font-weight="700" fill="#fff">Your next move.</text>
+<rect x="350" y="316" width="54" height="5" rx="2" fill="#ffd66d"/>
+<text x="350" y="367" font-family="Segoe UI,Arial,sans-serif" font-size="23" fill="#d4ead9">Budgets · bills · savings goals</text>
+</svg>

@@ -7,7 +7,8 @@ export function normalizeLoginSession(session,expectedUserId=null){
     typeof session.access_token!=="string"||!session.access_token||
     typeof session.refresh_token!=="string"||!session.refresh_token)
     throw Error("Invalid login session");
- if(expectedUserId!==null&&expectedUserId!==id)throw Error("Account identity changed");
+ // A server-confirmed identity change is an auth failure, never an offline fallback.
+ if(expectedUserId!==null&&expectedUserId!==id)throw Object.assign(Error("Account identity changed"),{httpStatus:401});
  const expiry=Number.isSafeInteger(session.expires_at)&&session.expires_at>0?session.expires_at:
     Number.isSafeInteger(session.expires_in)&&session.expires_in>0?
     Math.floor(Date.now()/1000)+session.expires_in:0;

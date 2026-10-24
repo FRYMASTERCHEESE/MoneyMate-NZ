@@ -6,10 +6,10 @@ def productionRelease = System.getenv('MONEYMATE_PRODUCTION_RELEASE') == 'true'
 def liveAdmobApp = System.getenv('MONEYMATE_ADMOB_APP_ID') ?: ''
 def liveAdmobBanner = System.getenv('MONEYMATE_ADMOB_BANNER_ID') ?: ''
 def testAdmobApp = 'ca-app-pub-3940256099942544~3347511713'
-def testAdmobBanner = 'ca-app-pub-3940256099942544/6300978111'
+def testAdmobBanner = 'ca-app-pub-3940256099942544/9214589741'
 if (productionRelease) {
-    if (!(liveAdmobApp ==~ /ca-app-pub-[0-9]{16}~[0-9]{10}/) || liveAdmobApp == testAdmobApp ||
-        !(liveAdmobBanner ==~ /ca-app-pub-[0-9]{16}\/[0-9]{10}/) || liveAdmobBanner == testAdmobBanner)
+    if (!(liveAdmobApp ==~ /ca-app-pub-[0-9]{16}~[0-9]{10}/) || liveAdmobApp.startsWith('ca-app-pub-3940256099942544') ||
+        !(liveAdmobBanner ==~ /ca-app-pub-[0-9]{16}\/[0-9]{10}/) || liveAdmobBanner.startsWith('ca-app-pub-3940256099942544'))
         throw new GradleException('A Play release requires your real AdMob app ID and banner unit ID (no test IDs).')
     for (name in ['MONEYMATE_RELEASE_KEYSTORE_PATH','MONEYMATE_RELEASE_STORE_PASSWORD',
                   'MONEYMATE_RELEASE_KEY_ALIAS','MONEYMATE_RELEASE_KEY_PASSWORD']) {
@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 13
-        versionName '0.3.9'
+        versionCode 14
+        versionName '0.4.0'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -105,12 +105,12 @@ tasks.register('verifyReleaseConfiguration') {
     doLast {
         def release = android.buildTypes.release
         assert android.defaultConfig.applicationId == 'nz.moneymate.app'
-        assert android.defaultConfig.versionCode == 13
-        assert android.defaultConfig.versionName == '0.3.9'
+        assert android.defaultConfig.versionCode == 14
+        assert android.defaultConfig.versionName == '0.4.0'
         assert release.minifyEnabled && release.shrinkResources
         assert release.proguardFiles.contains(file('proguard-rules.pro'))
         assert !release.proguardFiles.contains(file('proguard-instrumentation.pro'))
         assert productionRelease ? release.signingConfig == android.signingConfigs.production : release.signingConfig == null
-        println 'Verified MoneyMate 0.3.9 (13), production package, R8/resource shrinking, isolated test rules and gated signing.'
+        println 'Verified MoneyMate 0.4.0 (14), production package, R8/resource shrinking, isolated test rules and gated signing.'
     }
 }

@@ -37,6 +37,21 @@ public class AnzStatementTest {
         assertEquals("2025-12-31",rows.get(0).date);
         assertEquals("2026-01-01",rows.get(1).date);
     }
+    @Test public void impossibleDatesNeverSilentlyMoveToAnotherDay() {
+        for(String day:Arrays.asList("29 Feb 2025","30 Feb 2024","31 Apr 2024")) {
+            try {
+                String year=day.substring(day.length()-4);
+                AnzStatement.toCsv(Arrays.asList("Statement period 01 Jan "+year+" - 31 Dec "+year,
+                    "Date Transaction type and details Withdrawals Deposits Balance",
+                    "Opening balance 100.00",day+" Coffee 5.00 95.00"));
+                fail("Impossible date accepted");
+            } catch(IllegalArgumentException expected){}
+        }
+        String csv=AnzStatement.toCsv(Arrays.asList("Statement period 01 Feb 2024 - 29 Feb 2024",
+            "Date Transaction type and details Withdrawals Deposits Balance",
+            "Opening balance 100.00","29 Feb Coffee 5.00 95.00"));
+        assertTrue(csv.contains("2024-02-29"));
+    }
     @Test public void rejectsBalanceMismatchOrMissingPeriod() {
         List<List<String>> bad=Arrays.asList(
             Arrays.asList("Date Transaction type and details Withdrawals Deposits Balance","01 Sep Opening balance 100.00","02 Sep Coffee 5.00 95.00"),
@@ -45,5 +60,15 @@ public class AnzStatementTest {
         );
         for(List<String> lines:bad)try{PdfStatement.toCsv(lines);fail("Balance or period should be rejected");}
         catch(IllegalArgumentException expected){}
+    }
+    @Test public void yearlessLeapDayResolvesAcrossStatementYears() {
+        List<String> lines=Arrays.asList("Statement period 01 Dec 2023 - 29 Feb 2024",
+            "Date Transaction type and details Withdrawals Deposits Balance",
+            "Opening balance 100.00","29 Feb Coffee 5.00 95.00");
+        assertTrue(AnzStatement.toCsv(lines).contains("2024-02-29"));
+        for(String invalid:Arrays.asList("30 Feb Coffee 5.00 95.00","29 Feb 2023 Coffee 5.00 95.00")) {
+            try{AnzStatement.toCsv(Arrays.asList(lines.get(0),lines.get(1),lines.get(2),invalid));fail("Impossible date accepted");}
+            catch(IllegalArgumentException expected){}
+        }
     }
 }

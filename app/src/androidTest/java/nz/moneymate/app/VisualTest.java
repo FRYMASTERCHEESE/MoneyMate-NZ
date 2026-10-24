@@ -51,16 +51,15 @@ public class VisualTest {
             data.addRecurring("Expense","Internet","Example data",8500,LocalDate.now().plusDays(10).toString(),"Monthly");
         }
         activity=inst.startActivitySync(launch);inst.waitForIdleSync();
-        assertTrue(device.wait(Until.hasObject(By.textStartsWith("AVAILABLE THIS MONTH")),10000));
+        assertTrue(device.wait(Until.hasObject(By.textStartsWith("MONTHLY CASH FLOW")),10000));
         capture(device,dir,"02-home.png");
         new UiScrollable(new UiSelector().className("android.widget.ScrollView")).scrollIntoView(new UiSelector().textContains("Rent   "));
         capture(device,dir,"03-spending.png");
         for(String page:new String[]{"Transactions","Budgets","Goals","Bills","Export"}) {
-            UiObject tab=device.findObject(new UiSelector().className("android.widget.Button").text(page));
-            if(!tab.exists()) {
-                UiScrollable nav=new UiScrollable(new UiSelector().className("android.widget.HorizontalScrollView"));nav.setAsHorizontalList();nav.scrollIntoView(new UiSelector().text(page));
-            }
-            tab.click();inst.waitForIdleSync();
+            if(java.util.Arrays.asList("Goals","Export").contains(page)) {
+                device.findObject(new UiSelector().text("More")).click();
+                device.findObject(new UiSelector().text(page)).click();
+            } else device.findObject(new UiSelector().description(page)).click();inst.waitForIdleSync();
             capture(device,dir,page.toLowerCase()+".png");
         }
         try(Store data=new Store(ctx)) {

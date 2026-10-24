@@ -10,7 +10,7 @@
 </head><body>
 <div class="shell">
   <aside class="sidebar" aria-label="MoneyMate NZ navigation">
-    <a href="#home" class="brand"><span class="brand-icon" aria-hidden="true">◈</span><span>MoneyMate <strong>NZ</strong></span></a>
+    <a href="#home" class="brand"><img class="brand-icon" src="./wallet.svg" alt="" width="48" height="48"><span>MoneyMate <strong>NZ</strong></span></a>
     <p class="aside-caption">YOUR MONEY. YOUR PLAN.</p>
     <nav id="nav-side" aria-label="Main sections">
       <button data-page="home">⌂ <span>Home</span></button>
@@ -26,7 +26,7 @@
     <div class="side-foot"><span class="secure-dot" aria-hidden="true"></span> Offline-first · NZD<p>Private local records. No bank connection.</p></div>
   </aside>
   <div class="main-shell">
-    <header class="topbar"><div><span class="mobile-brand">◈ MoneyMate NZ</span><span id="date-heading">Good to see you</span></div><span id="profile-pill">Local profile</span></header>
+    <header class="topbar"><div><span class="mobile-brand"><img src="./wallet.svg" alt="" width="34" height="34"> MoneyMate NZ</span><span id="date-heading">Good to see you</span></div><button type="button" id="profile-pill" data-page="account" aria-label="Open your account">Local profile</button></header>
     <main id="view" tabindex="-1" aria-live="off"><div class="loading">Opening your budget...</div></main>
     <footer class="foot-links">
       <span>MoneyMate NZ · Budgeting, not banking or financial advice</span>
@@ -38,12 +38,12 @@
   <button data-page="home">⌂<small>Home</small></button>
   <button data-page="transactions">⇄<small>Activity</small></button>
   <button data-page="budgets">▤<small>Budgets</small></button>
-  <button data-page="goals">◎<small>Goals</small></button>
   <button data-page="bills">▦<small>Bills</small></button>
-  <button data-page="export">⇩<small>Files</small></button>
-  <button data-page="account">♙<small>Account</small></button>
-  <button data-page="banking">▣<small>Banks</small></button>
-  <button data-page="admin" hidden>✦<small>Admin</small></button>
+  <details class="mobile-more"><summary aria-label="More sections">•••<small>More</small></summary><div class="more-menu">
+    <button data-page="goals">Savings goals</button><button data-page="export">Export &amp; backup</button>
+    <button data-page="account">Account &amp; sync</button><button data-page="banking">Bank connections</button>
+    <button data-page="admin" hidden>Admin dashboard</button><a href="./help.html">Help &amp; guide</a>
+  </div></details>
 </nav>
 <dialog id="editor"><form id="editor-form" method="dialog"><div class="modal-title"><h2 id="editor-title">Add entry</h2><button type="button" class="close" id="cancel-modal" aria-label="Close">×</button></div>
   <div id="editor-fields"></div><p class="modal-hint" id="editor-hint"></p>
