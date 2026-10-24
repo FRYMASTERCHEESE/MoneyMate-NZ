@@ -183,17 +183,18 @@ test("failed empty-cloud CAS never overwrites a competing device or the phone go
  assert.match(h.state().cloudStatus,/changed/i);
 });
 
-test("empty signed-in website retains separate guest goal instead of hiding it behind a cloud link",async()=>{
- const h=app(),guest=records("car"),remote=records("other cloud goal");
- guest.goals[0].saved=2000;
+test("account auto-links existing cloud goal while retaining separate guest records",async()=>{
+ const h=app(),guest=records("separate guest car"),remote=records("car");
+ guest.goals[0].saved=1000;remote.goals[0].saved=2000;remote.goals[0].target=200000;
  await h.init(A,core.emptyData(),null);
  await h.putGuest(guest);
- h.mock(async()=>({revision:3,data:remote}),async()=>assert.fail("No upload without explicit guest import"));
+ h.mock(async()=>({revision:3,data:remote}),async()=>assert.fail("No upload permitted during account download"));
  await h.signInCloud();
- assert.equal((await h.read(A)).goals.length,0);
- assert.equal((await h.read("guest")).goals[0].name,"car");
- assert.equal((await h.read("guest")).goals[0].saved,2000);
- assert.equal(h.state().cloudMeta?.enabled??false,false);
- assert.match(h.state().cloudStatus,/guest records/i);
+ assert.equal((await h.read(A)).goals[0].name,"car");
+ assert.equal((await h.read(A)).goals[0].saved,2000);
+ assert.equal((await h.read("guest")).goals[0].name,"separate guest car");
+ assert.equal((await h.read("guest")).goals[0].saved,1000);
+ assert.equal(h.state().cloudMeta.enabled,true);
+ assert.match(h.state().cloudStatus,/guest records are preserved/i);
  assert.equal(h.prompts().length,0);
 });
