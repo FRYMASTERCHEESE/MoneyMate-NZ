@@ -1,0 +1,35 @@
+name: MoneyMate NZ live browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'docs/**'
+      - 'tools/release-browser-smoke.mjs'
+      - '.github/workflows/release-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-guest-browser-test:
+    name: Live desktop and mobile guest flows
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install open-source browser test runner
+        run: npm install --no-save --no-package-lock --ignore-scripts playwright@1.58.0
+      - name: Install headless Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Start static website candidate locally (no customer service changes)
+        run: |
+          python3 -m http.server 8765 --directory docs --bind 127.0.0.1 > /tmp/moneymate-local-server.log 2>&1 &
+          for i in 1 2 3 4 5; do curl -sf http://127.0.0.1:8765/ > /dev/null && break; sleep 1; done
+      - name: Test candidate website without cloud accounts or customer writes
+        env:
+          MONEYMATE_URL: http://127.0.0.1:8765/
+        run: node tools/release-browser-smoke.mjs
