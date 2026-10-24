@@ -814,14 +814,12 @@ async function cloudOnSignin(force=false) {
   // Existing consent on another device allows an EMPTY account profile to join.
   // Never upload financial records or discard populated local profiles silently.
   if(remote.revision>0&&localEmpty(data)&&remote.data){
-   // Do not strand older guest records behind an automatically linked account.
-   // Offer the existing explicit Copy guest records action before linking.
+   // Keep any guest records in their own local profile. The account's EMPTY
+   // profile can safely load its existing cloud copy without touching guests.
+   // This is important when the account already has goals online.
    const guest=await dbRead("guest");
    if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
-   if(!localEmpty(guest)){
-    cloudStatus="Separate local guest records found. Open Account to review Copy guest records before connecting this account to cloud.";
-    render();return;
-   }
+   const guestHasRecords=!localEmpty(guest);
    const baseline=strictData(data),restored=strictData(remote.data);
    const hash=await signature(restored);
    if(auth?.user?.id!==owner||profileEpoch!==epoch||JSON.stringify(data)!==JSON.stringify(baseline))return;
@@ -831,7 +829,8 @@ async function cloudOnSignin(force=false) {
     current:()=>auth?.user?.id===owner&&profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
    if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
    data=restored;cloudMeta=linked;
-   cloudStatus="Automatically linked this empty device to your existing cloud records.";
+   cloudStatus="Automatically linked this device to your existing cloud records."+
+    (guestHasRecords?" Your separate local guest records are preserved and have not been merged.":"");
    render();return;
   }
   cloudStatus=remote.revision>0?
