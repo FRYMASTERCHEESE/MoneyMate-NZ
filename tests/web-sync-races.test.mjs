@@ -10,12 +10,13 @@ import {decideSync} from "../docs/sync-policy.mjs";
 const A="11111111-1111-4111-8111-111111111111",B="22222222-2222-4222-8222-222222222222";
 function records(name){const d=core.emptyData();d.goals.push({id:1,name,target:10000,saved:0});return d;}
 function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};}
-function app(){
+function app(options={}){
+ const consentPrompts=[];
  const element={addEventListener(){},removeEventListener(){},close(){},classList:{add(){},remove(){}}};
  const context=vm.createContext({...core,writeProfile,decideSync,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
   FormData:class {get(key){return {category:"Synthetic",note:"Test",amount:"12.34",date:"2026-10-13"}[key];}},
   document:{querySelector:()=>element,querySelectorAll:()=>[],addEventListener(){},visibilityState:"visible"},
-  window:{addEventListener(){},confirm:()=>true},setInterval(){},setTimeout(){},clearTimeout(){}});
+  window:{addEventListener(){},confirm:prompt=>{consentPrompts.push(prompt);return options.consent!==false;}},setInterval(){},setTimeout(){},clearTimeout(){}});
  const source=readFileSync(new URL("../docs/web-app.js",import.meta.url),"utf8").replace(/^import .*;\r?\n/gm,"").replace(/^bootstrap\(\);/m,"");
  return vm.runInContext(source+`
  render=()=>{};
@@ -25,7 +26,7 @@ function app(){
   async init(owner,records,metadata){profile=owner;profileEpoch++;auth={user:{id:owner}};data=strictData(records);cloudMeta=metadata;await dbWrite(owner,data);profileReady=true;},
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
-  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,settled:()=>lastSync,
+  sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,settled:()=>lastSync,signInCloud:cloudOnSignin,prompts:()=>consentPrompts,
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus,cloudBusy};}
  })`,context);
@@ -100,4 +101,53 @@ test("two account profiles exchange every financial record type through revision
  await second.settled();
  assert.equal(second.state().cloudBusy,false);await first.sync();
  assert.equal(cloud.revision,2);assert.deepEqual(core.strictData(await first.read(A)),edited);
+});
+
+
+test("empty signed-in website automatically downloads an existing cloud copy without uploading",async()=>{
+ const h=app(),remote=records("car");
+ remote.goals[0].saved=2000;remote.goals[0].target=200000;
+ await h.init(A,core.emptyData(),null);
+ h.mock(async()=>({revision:7,data:remote}),async()=>assert.fail("Empty browser must never upload over existing cloud"));
+ await h.signInCloud();
+ const saved=await h.read(A);
+ assert.deepEqual(core.strictData(saved),remote);
+ assert.equal(h.state().cloudMeta.enabled,true);
+ assert.equal(h.state().cloudMeta.revision,7);
+ assert.equal(h.prompts().length,0,"Existing account cloud consent requires no second upload prompt");
+ assert.match(h.state().cloudStatus,/automatically linked/i);
+});
+test("auto-link never overwrites records saved while cloud request is pending",async()=>{
+ const h=app(),cloud=deferred();
+ await h.init(A,core.emptyData(),null);
+ h.mock(()=>cloud.promise,async()=>assert.fail("No cloud upload expected"));
+ const waiting=h.signInCloud();
+ await h.save(records("car added while waiting"));
+ cloud.resolve({revision:3,data:records("from cloud")});
+ await waiting;
+ assert.equal((await h.read(A)).goals[0].name,"car added while waiting");
+ assert.equal(h.state().cloudMeta,null);
+});
+test("existing local goal and different cloud goal require explicit conflict review",async()=>{
+ const h=app(),local=records("car"),remote=records("other device");
+ local.goals[0].saved=2000;remote.goals[0].saved=5000;
+ await h.init(A,local,null);
+ h.mock(async()=>({revision:2,data:remote}),async()=>assert.fail("A conflict must not upload"));
+ await h.signInCloud();
+ assert.equal((await h.read(A)).goals[0].name,"car");
+ assert.equal((await h.read(A)).goals[0].saved,2000);
+ assert.equal(h.state().cloudMeta.enabled,false);
+ assert.match(h.state().cloudStatus,/conflict/i);
+ assert.equal(h.prompts().length,1);
+});
+test("declining first-time cloud consent never uploads private financial records",async()=>{
+ const h=app({consent:false});await h.init(A,records("private car"),null);
+ h.mock(async()=>({revision:0}),async()=>assert.fail("Consent was declined; upload forbidden"));
+ await h.signInCloud();
+ assert.equal((await h.read(A)).goals[0].name,"private car");
+ assert.equal(h.state().cloudMeta.enabled,false);
+ assert.equal(h.prompts().length,1);
+ // Consent should not be repeatedly requested during every automatic status check.
+ await h.signInCloud(true);
+ assert.equal(h.prompts().length,1);
 });
