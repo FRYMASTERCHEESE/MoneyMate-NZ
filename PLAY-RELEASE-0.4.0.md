@@ -1,6 +1,6 @@
 # MoneyMate NZ 0.4.0 release candidate
 
-Prepared 24 October 2026. Package `nz.moneymate.app`, candidate version code **14**. This is a draft release, not an uploaded or approved Play release. Confirm 14 exceeds every version already used in Play before building the signed bundle.
+Prepared 24 October 2026. Package `nz.moneymate.app`, candidate version code **15**. Play Console's complete six-bundle history was inspected on 24 October: its highest uploaded code is **14**, used by **0.3.10**. The new 0.4.0 release therefore uses 15. PR #30 has merged and its website is deployed; the signed Android testing release is not yet uploaded or approved.
 
 ## Ready for review
 
