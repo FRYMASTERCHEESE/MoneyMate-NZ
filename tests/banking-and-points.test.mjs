@@ -2,9 +2,9 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
-test("offline cache refreshes on points retirement without resetting browser data",()=>{
+test("offline cache refreshes for new planning features without clearing browser data",()=>{
  assert.equal(read("sw.js"),read("docs/sw.js"));
- assert.match(read("docs/sw.js"),/moneymate-nz-web-v16-auto-account-sync/);
+ assert.match(read("docs/sw.js"),/moneymate-nz-web-v17-fortnight-planning/);
  assert.match(read("docs/sw.js"),/caches\.delete\(key\)/);
 });
 test("published website paths match and show no points UI",()=>{
