@@ -132,6 +132,43 @@ public class CloudSyncTest {
             assertEquals(3,revision[0]);assertEquals(3,stateB.revision);
         } finally {context.deleteDatabase(Store.databaseName(account));context.deleteDatabase(Store.databaseName(deviceFile));}
     }
+    /** A savings goal created before sign-in must survive copying into the account.
+     * Only the signed-in COPY may be uploaded after explicit account sync consent.
+     */
+    @Test public void localCarGoalSurvivesCopyAndConsentedAccountUpload() throws Exception {
+        Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        String localId="33333333-3333-4333-8333-333333333333";
+        String accountId="44444444-4444-4444-8444-444444444444";
+        context.deleteDatabase(Store.databaseName(localId));
+        context.deleteDatabase(Store.databaseName(accountId));
+        try(Store guest=new Store(context,localId);Store signedIn=new Store(context,accountId)) {
+            guest.addGoal("car",200000);
+            guest.contribute(1,2000);
+            String original=guest.backupJson();
+            assertTrue(signedIn.isEmpty());
+            signedIn.restoreJson(original);
+            assertEquals(original,guest.backupJson());
+            JSONObject accountSnapshot=new JSONObject(signedIn.backupJson());
+            JSONObject goal=accountSnapshot.getJSONArray("goals").getJSONObject(0);
+            assertEquals("car",goal.getString("name"));
+            assertEquals(200000L,goal.getLong("target"));
+            assertEquals(2000L,goal.getLong("saved"));
+            // A signed-in account's consent authorizes the first cloud upload.
+            CloudSync.Result synced=CloudSync.evaluate(new CloudSync.Metadata(true,0,""),0,null,
+                signedIn.backupJson(),(expected,data)->{
+                    assertEquals(0L,expected.longValue());
+                    assertEquals("car",data.getJSONArray("goals").optJSONObject(0).optString("name"));
+                    try{return new JSONObject().put("success",true).put("revision",1);}
+                    catch(Exception error){throw new RuntimeException(error);}
+                });
+            assertEquals(1L,synced.state.revision);
+            assertEquals(original,guest.backupJson());
+        }finally{
+            context.deleteDatabase(Store.databaseName(localId));
+            context.deleteDatabase(Store.databaseName(accountId));
+        }
+    }
+
     private CloudSync.Metadata syncDevice(AuthClient auth,CloudSync.Metadata state,Store store) throws Exception {
         CloudSync.Result result=CloudSync.synchronize(auth,state,store.backupJson());
         if(result.snapshot!=null)store.restoreJson(result.snapshot);
