@@ -858,7 +858,16 @@ async function enableCloud(preApproved=false) {
   if(profileEpoch!==epoch||await signature(data)!==localHash)throw Error("Records changed while enabling sync. Please retry.");
   if(remote.revision>0){
    const remoteData=strictData(remote.data);
-   if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
+   if(localEmpty(remoteData)&&!localEmpty(data)){
+    // A website can create an EMPTY cloud copy before the phone uploads its goal.
+    // After consent, fill only that empty copy using the observed server revision.
+    const result=await cloudCommit(remote.revision,baseline,owner);
+    if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+    if(!result.success){cloudStatus="Cloud records changed before setup. Both copies are safe; retry sync.";render();return;}
+    cloudMeta={enabled:true,revision:result.revision,digest:localHash};
+    cloudStatus="Your local records replaced an empty cloud backup. Automatic sync is active.";
+    if(await signature(data)!==localHash)cloudPending=true;
+   }else if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
     const metadata={enabled:true,revision:remote.revision,digest:await signature(remoteData)};
     await dbWrite(owner,remoteData,{expected:baseline,recovery:true,metadata,current:()=>profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
     if(profileEpoch!==epoch)return;
