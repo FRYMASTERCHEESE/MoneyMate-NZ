@@ -151,3 +151,33 @@ test("declining first-time cloud consent never uploads private financial records
  await h.signInCloud(true);
  assert.equal(h.prompts().length,1);
 });
+
+test("consented phone goal can fill an existing EMPTY cloud snapshot by revision",async()=>{
+ const h=app(),car=records("car"),cloud={revision:3,data:core.emptyData()};
+ car.goals[0].saved=2000;car.goals[0].target=200000;
+ await h.init(A,car,null);
+ h.mock(async()=>structuredClone(cloud),async(expected,snapshot)=>{
+  assert.equal(expected,3);assert.equal(snapshot.goals[0].name,"car");
+  assert.equal(core.emptyData().goals.length,cloud.data.goals.length,"Only the empty cloud copy is replaced");
+  cloud.revision=4;cloud.data=structuredClone(snapshot);
+  return {success:true,revision:4};
+ });
+ await h.enable();
+ assert.equal(h.state().cloudMeta.revision,4);
+ assert.equal(h.state().cloudMeta.enabled,true);
+ assert.equal(cloud.data.goals[0].saved,2000);
+ assert.equal((await h.read(A)).goals[0].name,"car");
+});
+test("failed empty-cloud CAS never overwrites a competing device or the phone goal",async()=>{
+ const h=app(),car=records("car"),changedByOther=records("other device");
+ await h.init(A,car,null);
+ h.mock(async()=>({revision:3,data:core.emptyData()}),async(expected,snapshot)=>{
+  assert.equal(expected,3);
+  assert.equal(snapshot.goals[0].name,"car");
+  return {success:false,revision:4};
+ });
+ await h.enable();
+ assert.equal((await h.read(A)).goals[0].name,"car");
+ assert.equal(h.state().cloudMeta?.enabled??false,false);
+ assert.match(h.state().cloudStatus,/changed/i);
+});
