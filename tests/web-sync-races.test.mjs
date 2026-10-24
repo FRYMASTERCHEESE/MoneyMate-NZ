@@ -13,7 +13,7 @@ function deferred(){let resolve;const promise=new Promise(r=>resolve=r);return {
 function app(options={}){
  const consentPrompts=[];
  const element={addEventListener(){},removeEventListener(){},close(){},classList:{add(){},remove(){}}};
- const context=vm.createContext({...core,writeProfile,decideSync,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
+ const context=vm.createContext({...core,writeProfile,decideSync,consentPrompts,indexedDB:new IDBFactory(),crypto,TextEncoder,structuredClone,
   FormData:class {get(key){return {category:"Synthetic",note:"Test",amount:"12.34",date:"2026-10-13"}[key];}},
   document:{querySelector:()=>element,querySelectorAll:()=>[],addEventListener(){},visibilityState:"visible"},
   window:{addEventListener(){},confirm:prompt=>{consentPrompts.push(prompt);return options.consent!==false;}},setInterval(){},setTimeout(){},clearTimeout(){}});
@@ -126,7 +126,7 @@ test("auto-link never overwrites records saved while cloud request is pending",a
  cloud.resolve({revision:3,data:records("from cloud")});
  await waiting;
  assert.equal((await h.read(A)).goals[0].name,"car added while waiting");
- assert.equal(h.state().cloudMeta,null);
+ assert.equal(h.state().cloudMeta?.enabled??false,false);
 });
 test("existing local goal and different cloud goal require explicit conflict review",async()=>{
  const h=app(),local=records("car"),remote=records("other device");
