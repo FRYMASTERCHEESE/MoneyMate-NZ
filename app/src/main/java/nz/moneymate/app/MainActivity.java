@@ -235,6 +235,38 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         overview.addView(text("Unpaid bills due this month   "+MoneyMath.format(plan[1]),15,false));
         overview.addView(text("Savings goals reached   "+plan[2]+" / "+plan[3],15,false));
         overview.addView(text("Budgets cover their categories only. Unpaid bills are not deducted from cash flow.",12,false));content.addView(overview);
+
+        // Forward planning from existing unpaid bills and repeating schedules only.
+        // This never changes a bank balance, sends a payment, or edits records.
+        try {
+            FortnightPlan.Summary future=FortnightPlan.calculate(store,LocalDate.now(),14);
+            LinearLayout lookahead=card();
+            lookahead.addView(text("Next 14 days · NZ money plan",18,true));
+            lookahead.addView(text("Upcoming money movements you scheduled",13,false));
+            lookahead.addView(text("↗  Scheduled income    "+MoneyMath.format(future.incoming),15,true));
+            lookahead.addView(text("↘  Planned outgoings   "+MoneyMath.format(future.outgoing),15,true));
+            TextView difference=text("≈  Planned difference   "+MoneyMath.format(future.net),16,true);
+            if(future.net<0)difference.setTextColor(0xffad4136);
+            lookahead.addView(difference);
+            if(future.events.isEmpty()) {
+                lookahead.addView(text("Add unpaid bills or repeating income and expenses to plan your fortnight.",13,false));
+            }else{
+                lookahead.addView(text("On the horizon",15,true));
+                for(int i=0;i<Math.min(6,future.events.size());i++) {
+                    FortnightPlan.Event e=future.events.get(i);
+                    String amount=(e.kind.equals("Income")?"+":"−")+MoneyMath.format(e.cents);
+                    lookahead.addView(text(e.date+"  "+e.name+" · "+e.type+"   "+amount,13,false));
+                }
+                if(future.events.size()>6)
+                    lookahead.addView(text("And "+(future.events.size()-6)+" more planned entries this fortnight.",12,false));
+            }
+            lookahead.addView(text("Planning estimate only — not your bank balance or a payment promise. Bills also entered as repeating expenses appear twice; check your schedules.",12,false));
+            content.addView(lookahead);
+        }catch(Exception problem) {
+            // Bad old local schedules must not prevent a customer opening Home.
+            line("Your upcoming money plan is unavailable. Existing financial records remain unchanged.");
+        }
+
         title("Spending categories");
         try(Cursor c=store.query("SELECT category,SUM(cents) FROM transactions WHERE kind='Expense' AND substr(date,1,7)=? GROUP BY category ORDER BY SUM(cents) DESC",month())) {
             if(c.getCount()==0)empty("Make spending visible","Add an expense to see your category breakdown here.");
