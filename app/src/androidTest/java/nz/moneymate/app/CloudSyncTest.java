@@ -179,7 +179,7 @@ public class CloudSyncTest {
             CloudSync.Result synced=CloudSync.evaluate(new CloudSync.Metadata(true,0,""),0,null,
                 signedIn.backupJson(),(expected,data)->{
                     assertEquals(0L,expected.longValue());
-                    assertEquals("car",data.getJSONArray("goals").optJSONObject(0).optString("name"));
+                    assertEquals("car",data.optJSONArray("goals").optJSONObject(0).optString("name"));
                     try{return new JSONObject().put("success",true).put("revision",1);}
                     catch(Exception error){throw new RuntimeException(error);}
                 });
