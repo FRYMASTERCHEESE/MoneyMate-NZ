@@ -101,6 +101,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             requestCloudSync(false);
             requestAdminOverview(false);
             attachExistingCloudIfEmpty();
+            offerAutomaticSyncOnce();
         }
         // Automatically check the public theme on launch/return.
         if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
@@ -572,7 +573,48 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         if(auth.userId()!=null){
             requestAdminOverview(false);
             attachExistingCloudIfEmpty();
+            offerAutomaticSyncOnce();
         }
+    }
+    /** One-time, explicit, user-approved setup. Financial records remain local
+     * until this account holder accepts the cloud-storage disclosure.
+     * Guest records are NEVER copied or uploaded without the user's choice.
+     */
+    private void offerAutomaticSyncOnce() {
+        final String owner=auth.userId();
+        if(owner==null||accountBusy||cloudBusy||captureMode()||CloudSync.metadata(this,owner).enabled)return;
+        final android.content.SharedPreferences prefs=getSharedPreferences("moneymate_auto_sync_setup_v1",MODE_PRIVATE);
+        if(prefs.getBoolean(owner,false))return;
+        final boolean copyGuest;
+        try(Store guest=new Store(this)) {
+            copyGuest=store.isEmpty()&&!guest.isEmpty();
+        }catch(Exception error){return;}
+        String prompt=copyGuest
+            ?"This signed-in account has no financial records yet, but your phone has saved local records. Copy the local records (including savings goals) into this account and turn on automatic syncing? The original local copy is kept. Your private records will be stored in Supabase in Sydney, Australia. Different cloud data will never be overwritten automatically. Save a JSON backup when possible."
+            :"Turn on automatic MoneyMate NZ syncing for this signed-in account? Transactions, savings goals, budgets, bills and repeating entries will be backed up privately in Supabase in Sydney, Australia. Your local records remain on the phone. Conflicting cloud records are never silently overwritten. Save a JSON backup when possible.";
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle(copyGuest?"Bring your saved goals to this account?":"Keep your devices in sync?")
+            .setMessage(prompt).setNegativeButton("Not now",null)
+            .setPositiveButton(copyGuest?"Copy and enable auto-sync":"Enable automatic sync",(d,w)->{
+                if(!owner.equals(auth.userId())||accountBusy||cloudBusy||CloudSync.metadata(this,owner).enabled)return;
+                try{
+                    if(copyGuest) {
+                        if(!store.isEmpty()){
+                            message("This account now has records; the separate local records were kept. Review both backups before combining them.");
+                            return;
+                        }
+                        try(Store guest=new Store(this)) {
+                            String original=guest.backupJson();
+                            if(CloudSync.empty(original))return;
+                            // A copy, not a move. Local guest finances remain intact.
+                            store.restoreJson(original);
+                        }
+                    }
+                    beginAutomaticCloudSync(owner);
+                }catch(Exception error){message("Cloud setup was stopped; original local records remain safe. Review Account and try again.");}
+            }).create();
+        dialog.show();
+        prefs.edit().putBoolean(owner,true).apply();
     }
     private boolean isVerifiedAdmin() {
         return auth.userId()!=null&&auth.userId().equals(adminReportOwner)&&adminReport!=null;
@@ -762,6 +804,16 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         }
         confirmCloudEnable();
     }
+    private void beginAutomaticCloudSync(String owner) {
+        if(owner==null||!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
+        try{
+            if(!CloudSync.metadata(this,owner).enabled)
+                CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
+            cloudStatus="Checking private cloud records before syncing.";
+            ignoreNextAutoSync=true;show("Account");
+            requestCloudSync(true);
+        }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
+    }
     private void confirmCloudEnable() {
         final String owner=auth.userId();
         if(owner==null||cloudBusy||accountBusy)return;
@@ -771,12 +823,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Enable secure sync",(d,w)->{
                 try{
-                    if(!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
-                    if(!CloudSync.metadata(this,owner).enabled)
-                        CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
-                    cloudStatus="Checking private cloud records before syncing.";
-                    ignoreNextAutoSync=true;show("Account");
-                    requestCloudSync(true);
+                    beginAutomaticCloudSync(owner);
                 }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
             }).show();
     }
