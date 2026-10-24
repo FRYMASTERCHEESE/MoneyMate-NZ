@@ -107,7 +107,7 @@ jobs:
             bash tools/ocr_device_probe.sh debug sequence
             bash tools/ocr_device_probe.sh r8Test sequence
             mkdir -p screenshots
-            adb pull /sdcard/Download/moneymate-screenshots/. screenshots/
+            bash tools/collect_emulator_screenshots.sh
             "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs app/build/outputs/apk/debug/app-debug.apk > screenshots/apk-certificate.txt
             grep -q '7bf330320f1084bed0f590db25269ad8559d3195a85ff3a1a4c442ed3d0f664c' screenshots/apk-certificate.txt
       - name: Check release obfuscation evidence
