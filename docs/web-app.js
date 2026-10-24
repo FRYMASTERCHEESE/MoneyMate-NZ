@@ -17,7 +17,7 @@ let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
 let refreshInFlight=null;
-let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
+let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudDiscoveryBusy=false,lastCloudProbe=0,cloudStatus="Cloud sync is off";
 let profileEpoch=0;
 let financialSaving=false;
 let profileReady=false;
@@ -60,12 +60,13 @@ async function save(next){
  if(profileEpoch!==epoch)return;
  render();
  if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
+ else if(auth?.user?.id===owner&&!cloudMeta?.offered)void cloudOnSignin(true);
 }
 async function switchOwner(id){
  profileReady=false;
  const epoch=++profileEpoch,owner=id||"guest";
  editor.close();
- profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;lastCloudProbe=0;
  const stored=await dbRead(owner);
  if(profileEpoch!==epoch)return;
  const result=recordDue(stored,today());
@@ -796,27 +797,55 @@ async function cloudCommit(revision,backup,owner=auth?.user?.id) {
  if(typeof result.success!=="boolean"||!Number.isSafeInteger(result.revision))throw Error("Cloud save returned an invalid reply.");
  return result;
 }
-async function cloudOnSignin() {
+async function cloudOnSignin(force=false) {
  const owner=auth?.user?.id,epoch=profileEpoch;
- if(!owner)return;
- const metadata=await dbSyncMeta(owner)||null;
- if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
- cloudMeta=metadata;
- if(cloudMeta?.enabled){await syncCloud(false);return;}
+ if(!owner||cloudBusy||cloudDiscoveryBusy||(!force&&lastCloudProbe&&Date.now()-lastCloudProbe<60000))return;
+ cloudDiscoveryBusy=true;lastCloudProbe=Date.now();
  try {
+  const metadata=await dbSyncMeta(owner)||null;
+  if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch)return;
+  cloudMeta=metadata;
+  if(cloudMeta?.enabled){await syncCloud(false);return;}
   const remote=await cloudRead();
-  if(auth?.user?.id!==owner||profile!==owner)return;
+  if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch)return;
+  // Existing consent on another device allows an EMPTY account profile to join.
+  // Never upload financial records or discard populated local profiles silently.
+  if(remote.revision>0&&localEmpty(data)&&remote.data){
+   const baseline=strictData(data),restored=strictData(remote.data);
+   const hash=await signature(restored);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch||JSON.stringify(data)!==JSON.stringify(baseline))return;
+   const linked={enabled:true,revision:remote.revision,digest:hash};
+   // Atomic saved-data, recovery-copy and metadata write, guarded against late edits.
+   await dbWrite(owner,restored,{expected:baseline,recovery:true,metadata:linked,
+    current:()=>auth?.user?.id===owner&&profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   data=restored;cloudMeta=linked;
+   cloudStatus="Automatically linked this empty device to your existing cloud records.";
+   render();return;
+  }
   cloudStatus=remote.revision>0?
-    "Cloud copy available. Export a JSON backup, then tap Enable secure cloud sync to use it on this device.":
-    "Cloud sync is off. Enable it to share your finances across devices.";
+   "Different local and cloud records detected. Export a JSON backup, then enable sync to review the conflict.":
+   "Automatic syncing is available after you approve cloud storage for this account.";
+  render();
+  // Ask just once, and only if actual financial data could be uploaded.
+  if(!metadata?.offered&&!localEmpty(data)){
+   const offered={enabled:false,revision:0,digest:"",offered:true};
+   await dbSyncMeta(owner,offered);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   cloudMeta=offered;
+   const approved=window.confirm("Automatically sync MoneyMate NZ on your signed-in devices? This stores your financial records on your private Supabase account in Sydney, Australia. Existing records will NOT be overwritten if they conflict. Keep a JSON backup. Turn on automatic sync?");
+   if(approved&&auth?.user?.id===owner&&profileEpoch===epoch)await enableCloud(true);
+   else render();
+  }
  }catch{
-  cloudStatus="Cloud status unavailable. Your local financial records remain safe.";
- }
- render();
+  if(auth?.user?.id===owner&&profileEpoch===epoch){
+   cloudStatus="Cloud check unavailable. Your local financial records are unchanged.";render();
+  }
+ }finally{cloudDiscoveryBusy=false;}
 }
-async function enableCloud() {
+async function enableCloud(preApproved=false) {
  if(!auth)return;
- if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ if(!preApproved&&!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
  if(cloudBusy)return;
  cloudBusy=true;
  try{
@@ -930,10 +959,11 @@ async function foregroundRefresh(){
  if(document.visibilityState!=="visible")return;
  await refreshDueEntries();
  if(auth&&cloudMeta?.enabled)void syncCloud(false);
+ else if(auth&&!cloudDiscoveryBusy&&Date.now()-lastCloudProbe>60000)void cloudOnSignin(false);
 }
 document.addEventListener("visibilitychange",()=>{void foregroundRefresh();});
 
-window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
+window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);else if(auth)void cloudOnSignin(true);});
 setInterval(()=>{void foregroundRefresh();},45000);
 async function copyGuest(){
  if(!auth)return;
