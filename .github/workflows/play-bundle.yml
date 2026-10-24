@@ -1,11 +1,20 @@
 name: MoneyMate NZ signed Play bundle
 on:
   workflow_dispatch:
+  workflow_run:
+    workflows: ["Android CI"]
+    types: [completed]
+    branches: [main]
 permissions:
   contents: read
 jobs:
   signed-bundle:
-    if: github.ref == 'refs/heads/main'
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+        github.event.workflow_run.conclusion == 'success' &&
+        github.event.workflow_run.head_branch == 'main' &&
+        github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -18,6 +27,10 @@ jobs:
       MONEYMATE_KEYSTORE_B64: ${{ secrets.MONEYMATE_RELEASE_KEYSTORE_BASE64 }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Sign exactly the reviewed commit whose six Android jobs passed,
+          # not an unrelated newer main commit or an untrusted PR branch.
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

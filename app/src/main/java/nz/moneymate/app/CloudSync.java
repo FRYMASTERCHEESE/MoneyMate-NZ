@@ -77,6 +77,16 @@ final class CloudSync {
         String remote=remoteData.toString();
         if(state.revision==0) {
             if(empty(local)) return new Result("Cloud records available",remote,new Metadata(true,remoteRevision,""));
+            // A previously enabled website can have an EMPTY saved cloud snapshot.
+            // After explicit device consent, filling that empty snapshot is safe
+            // with a compare-and-swap on the exact observed server revision.
+            if(empty(remote)) {
+                JSONObject result=commit.apply(remoteRevision,new JSONObject(local));
+                if(result.optBoolean("success",false))
+                    return new Result("Synced your saved phone records",null,
+                        new Metadata(true,result.getLong("revision"),current));
+                return new Result("Sync conflict: the empty cloud copy changed before upload. Both copies remain safe.",null,state);
+            }
             return new Result("Sync conflict: existing device data and cloud data differ. Export a JSON backup first.",null,state);
         }
         if(remoteRevision!=state.revision) {

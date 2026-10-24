@@ -26,8 +26,8 @@ android {
         applicationId 'nz.moneymate.app'
         minSdk 26
         targetSdk 36
-        versionCode 15
-        versionName '0.4.0'
+        versionCode 16
+        versionName '0.4.1'
         // Public client configuration only. Never provide a service-role or secret key.
         def publicConfigFile = rootProject.file('docs/account-config.json')
         def publicConfig = publicConfigFile.exists() ? new groovy.json.JsonSlurper().parse(publicConfigFile) : [:]
@@ -105,12 +105,12 @@ tasks.register('verifyReleaseConfiguration') {
     doLast {
         def release = android.buildTypes.release
         assert android.defaultConfig.applicationId == 'nz.moneymate.app'
-        assert android.defaultConfig.versionCode == 15
-        assert android.defaultConfig.versionName == '0.4.0'
+        assert android.defaultConfig.versionCode == 16
+        assert android.defaultConfig.versionName == '0.4.1'
         assert release.minifyEnabled && release.shrinkResources
         assert release.proguardFiles.contains(file('proguard-rules.pro'))
         assert !release.proguardFiles.contains(file('proguard-instrumentation.pro'))
         assert productionRelease ? release.signingConfig == android.signingConfigs.production : release.signingConfig == null
-        println 'Verified MoneyMate 0.4.0 (15), production package, R8/resource shrinking, isolated test rules and gated signing.'
+        println 'Verified MoneyMate 0.4.1 (16), production package, R8/resource shrinking, isolated test rules and gated signing.'
     }
 }

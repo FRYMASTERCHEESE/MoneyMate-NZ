@@ -101,6 +101,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             requestCloudSync(false);
             requestAdminOverview(false);
             attachExistingCloudIfEmpty();
+            offerAutomaticSyncOnce();
         }
         // Automatically check the public theme on launch/return.
         if(!((BuildConfig.DEBUG || "r8Test".equals(BuildConfig.BUILD_TYPE))&&getIntent().getBooleanExtra("captureMode",false)) &&
@@ -186,7 +187,9 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         logo.setBackground(surface(heroColor,14));logo.setClipToOutline(true);brandRow.addView(logo,new LinearLayout.LayoutParams(dp(46),dp(46)));
         TextView brand=text("MoneyMate NZ",24,true);brandRow.addView(brand,new LinearLayout.LayoutParams(0,-2,1));
         root.addView(brandRow);
-        TextView subtitle=text(tagline,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
+        String syncLabel=auth.userId()==null?" · Local profile":
+            (CloudSync.metadata(this,auth.userId()).enabled?" · Automatic sync on":" · Sync not enabled");
+        TextView subtitle=text(tagline+syncLabel,13,false);subtitle.setTextColor(0xff60746d);root.addView(subtitle);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);root.addView(content);
         switch(page) {
             case "Transactions": transactions();break;case "Budgets": budgets();break;
@@ -572,7 +575,48 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         if(auth.userId()!=null){
             requestAdminOverview(false);
             attachExistingCloudIfEmpty();
+            offerAutomaticSyncOnce();
         }
+    }
+    /** One-time, explicit, user-approved setup. Financial records remain local
+     * until this account holder accepts the cloud-storage disclosure.
+     * Guest records are NEVER copied or uploaded without the user's choice.
+     */
+    private void offerAutomaticSyncOnce() {
+        final String owner=auth.userId();
+        if(owner==null||accountBusy||cloudBusy||captureMode()||CloudSync.metadata(this,owner).enabled)return;
+        final android.content.SharedPreferences prefs=getSharedPreferences("moneymate_auto_sync_setup_v1",MODE_PRIVATE);
+        if(prefs.getBoolean(owner,false))return;
+        final boolean copyGuest;
+        try(Store guest=new Store(this)) {
+            copyGuest=store.isEmpty()&&!guest.isEmpty();
+        }catch(Exception error){return;}
+        String prompt=copyGuest
+            ?"This signed-in account has no financial records yet, but your phone has saved local records. Copy the local records (including savings goals) into this account and turn on automatic syncing? The original local copy is kept. Your private records will be stored in Supabase in Sydney, Australia. Different cloud data will never be overwritten automatically. Save a JSON backup when possible."
+            :"Turn on automatic MoneyMate NZ syncing for this signed-in account? Transactions, savings goals, budgets, bills and repeating entries will be backed up privately in Supabase in Sydney, Australia. Your local records remain on the phone. Conflicting cloud records are never silently overwritten. Save a JSON backup when possible.";
+        AlertDialog dialog=new AlertDialog.Builder(this)
+            .setTitle(copyGuest?"Bring your saved goals to this account?":"Keep your devices in sync?")
+            .setMessage(prompt).setNegativeButton("Not now",null)
+            .setPositiveButton(copyGuest?"Copy and enable auto-sync":"Enable automatic sync",(d,w)->{
+                if(!owner.equals(auth.userId())||accountBusy||cloudBusy||CloudSync.metadata(this,owner).enabled)return;
+                try{
+                    if(copyGuest) {
+                        if(!store.isEmpty()){
+                            message("This account now has records; the separate local records were kept. Review both backups before combining them.");
+                            return;
+                        }
+                        try(Store guest=new Store(this)) {
+                            String original=guest.backupJson();
+                            if(CloudSync.empty(original))return;
+                            // A copy, not a move. Local guest finances remain intact.
+                            store.restoreJson(original);
+                        }
+                    }
+                    beginAutomaticCloudSync(owner);
+                }catch(Exception error){message("Cloud setup was stopped; original local records remain safe. Review Account and try again.");}
+            }).create();
+        dialog.show();
+        prefs.edit().putBoolean(owner,true).apply();
     }
     private boolean isVerifiedAdmin() {
         return auth.userId()!=null&&auth.userId().equals(adminReportOwner)&&adminReport!=null;
@@ -627,6 +671,12 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         try{
             before=store.backupJson();
             if(!CloudSync.empty(before))return;
+            // Prefer offering to COPY existing phone guest goals before auto-linking
+            // an empty account to the cloud. Guest records must never be stranded
+            // behind an unrelated signed-in profile without a visible choice.
+            try(Store guest=new Store(this)) {
+                if(!guest.isEmpty())return;
+            }
         }catch(Exception ignored){return;}
         lastCloudLinkCheck=now;cloudLinkCheckRunning=true;
         accountWorker.execute(()->{
@@ -677,7 +727,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         title("4. Plan with budgets and goals");
         line("Budgets → set a monthly amount for a category. Goals → create a target and add contributions as you save. Bills → add amounts and due dates; Record as paid adds an expense without sending money.");
         title("5. Sync Android with the website");
-        line("First save a JSON backup separately on BOTH devices in Export. Then use the same signed-in account on each. On the first device tap Account → Enable secure cloud sync; wait for confirmation. On the second device also enable sync. Sync happens while online and when edits are saved. If there is a conflict, export both copies first and do not replace data blindly.");
+        line("First save JSON backups on both devices in Export. Sign in with the SAME Google/email account on Android and the website. Android 0.4.1 offers to copy saved Local profile goals into your account and enable automatic sync; the original records stay put. If your signed-in profile already has records, approve the one-time sync prompt or use Account → Enable secure cloud sync. The empty website profile will automatically fetch an existing cloud copy when online. Edits sync while the app/website is open or resumed, without tapping Sync now. Conflicts preserve both copies; never replace either before exporting backups.");
         title("6. Back up and restore safely");
         line("Export → Backup all data (JSON) preserves your current profile. Export CSV saves transaction rows for spreadsheets. Restore full backup (JSON) REPLACES existing profile records; bank CSV import only ADDS new transactions.");
         title("7. Help and privacy");
@@ -762,6 +812,16 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         }
         confirmCloudEnable();
     }
+    private void beginAutomaticCloudSync(String owner) {
+        if(owner==null||!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
+        try{
+            if(!CloudSync.metadata(this,owner).enabled)
+                CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
+            cloudStatus="Checking private cloud records before syncing.";
+            ignoreNextAutoSync=true;show("Account");
+            requestCloudSync(true);
+        }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
+    }
     private void confirmCloudEnable() {
         final String owner=auth.userId();
         if(owner==null||cloudBusy||accountBusy)return;
@@ -771,12 +831,7 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
             .setNegativeButton("Cancel",null)
             .setPositiveButton("Enable secure sync",(d,w)->{
                 try{
-                    if(!owner.equals(auth.userId())||cloudBusy||accountBusy)return;
-                    if(!CloudSync.metadata(this,owner).enabled)
-                        CloudSync.persist(this,owner,new CloudSync.Metadata(true,0,""));
-                    cloudStatus="Checking private cloud records before syncing.";
-                    ignoreNextAutoSync=true;show("Account");
-                    requestCloudSync(true);
+                    beginAutomaticCloudSync(owner);
                 }catch(Exception error){message("Cloud setup failed. Local records remain safe.");}
             }).show();
     }

@@ -68,7 +68,7 @@ public class ReleaseReadinessTest {
     @Test public void testBuildHasOfficialTestAdsAndExpectedVersion() throws Exception {
         Context context=InstrumentationRegistry.getInstrumentation().getTargetContext();
         android.content.pm.PackageInfo info=context.getPackageManager().getPackageInfo(context.getPackageName(),0);
-        assertEquals("0.4.0",info.versionName);assertEquals(15,info.versionCode);
+        assertEquals("0.4.1",info.versionName);assertEquals(16,info.versionCode);
         assertEquals("ca-app-pub-3940256099942544/9214589741",BuildConfig.ADMOB_BANNER_ID);
         android.content.pm.ApplicationInfo app=context.getPackageManager().getApplicationInfo(context.getPackageName(),android.content.pm.PackageManager.GET_META_DATA);
         assertEquals("ca-app-pub-3940256099942544~3347511713",app.metaData.getString("com.google.android.gms.ads.APPLICATION_ID"));
