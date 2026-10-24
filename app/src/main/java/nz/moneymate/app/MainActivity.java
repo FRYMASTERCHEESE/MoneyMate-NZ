@@ -671,6 +671,12 @@ public final class MainActivity extends androidx.activity.ComponentActivity {
         try{
             before=store.backupJson();
             if(!CloudSync.empty(before))return;
+            // Prefer offering to COPY existing phone guest goals before auto-linking
+            // an empty account to the cloud. Guest records must never be stranded
+            // behind an unrelated signed-in profile without a visible choice.
+            try(Store guest=new Store(this)) {
+                if(!guest.isEmpty())return;
+            }
         }catch(Exception ignored){return;}
         lastCloudLinkCheck=now;cloudLinkCheckRunning=true;
         accountWorker.execute(()->{
