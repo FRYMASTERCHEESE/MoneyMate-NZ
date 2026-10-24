@@ -113,6 +113,64 @@ try {
   assert.equal(overflows, false, 'Mobile layout exceeds viewport width');
   console.log('PASS: Mobile navigation, account forms and 390px viewport');
 
+  // Full browser login + cloud-goal recovery, with ALL Supabase traffic mocked.
+  // No real password, account, cloud storage or customer record is accessed.
+  const customer = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    timezoneId: 'Pacific/Auckland',
+    serviceWorkers: 'block',
+  });
+  const signed = await customer.newPage();
+  signed.on('pageerror', err => failures.push('Synthetic signed-in flow: ' + err.message));
+  const syntheticId = '11111111-1111-4111-8111-111111111111';
+  const goalFromAndroid = {
+    format: 'MoneyMateNZ', version: 1, transactions: [], budgets: [],
+    goals: [{ id: 1, name: 'car', saved: 2000, target: 200000 }],
+    bills: [], recurring: [],
+  };
+  let cloudWrites = 0;
+  await signed.route('https://efdegdlsrkxlnjgbxtep.supabase.co/**', async route => {
+    const reqUrl = new URL(route.request().url());
+    if (reqUrl.pathname === '/auth/v1/token' && reqUrl.searchParams.get('grant_type') === 'password') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        access_token: 'synthetic-access-only', refresh_token: 'synthetic-refresh-only',
+        expires_in: 3600, user: { id: syntheticId, email: 'synthetic@example.invalid' },
+      }) });
+    } else if (reqUrl.pathname === '/auth/v1/user') {
+      await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({
+        id: syntheticId, email: 'synthetic@example.invalid',
+      }) });
+    } else if (reqUrl.pathname === '/rest/v1/rpc/read_account_snapshot') {
+      await route.fulfill({ status: 200, contentType: 'application/json',
+        body: JSON.stringify({ revision: 3, data: goalFromAndroid }) });
+    } else if (reqUrl.pathname === '/rest/v1/rpc/commit_account_snapshot') {
+      cloudWrites++;
+      await route.fulfill({ status: 409, contentType: 'application/json', body: '{}' });
+    } else if (reqUrl.pathname === '/rest/v1/rpc/moneymate_admin_overview') {
+      await route.fulfill({ status: 403, contentType: 'application/json', body: '{}' });
+    } else {
+      await route.abort('blockedbyclient');
+    }
+  });
+  await openSite(signed);
+  await signed.locator('#nav-mobile .mobile-more summary').click();
+  await signed.locator('#nav-mobile .mobile-more [data-page="account"]').click();
+  await signed.locator('#signin-form #email').fill('synthetic@example.invalid');
+  await signed.locator('#signin-form #password').fill('synthetic-password-not-real');
+  await signed.locator('#signin-form button[type="submit"]').click();
+  await signed.locator('#profile-pill').getByText('synthetic@example.invalid').waitFor({ timeout: 15_000 });
+  await signed.locator('#nav-mobile .mobile-more summary').click();
+  await signed.locator('#nav-mobile .mobile-more [data-page="goals"]').click();
+  await signed.getByRole('heading', { name: 'car' }).waitFor({ timeout: 15_000 });
+  assert.match(await signed.locator('#view').innerText(), /\$20\.00 saved of \$2,000\.00/);
+  assert.equal(cloudWrites, 0, 'Cloud download must never overwrite customer data');
+  console.log('PASS: Signed-in empty website automatically displays the Android car goal from a simulated cloud account');
+  await signed.reload({ waitUntil: 'domcontentloaded' });
+  await signed.getByRole('heading', { name: 'car' }).waitFor({ timeout: 15_000 });
+  assert.equal(cloudWrites, 0, 'Session restore must not upload an existing cloud copy');
+  console.log('PASS: Signed-in cloud goal stays saved across a full browser refresh');
+  await customer.close();
+
   assert.deepEqual(failures, [], 'Uncaught browser JavaScript errors detected');
   await mobile.close();
   await desktop.close();
