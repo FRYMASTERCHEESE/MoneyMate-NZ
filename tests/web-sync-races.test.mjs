@@ -27,6 +27,7 @@ function app(options={}){
   mock(read,commit){cloudRead=read;cloudCommit=commit;},
   async metadata(records,revision){return {enabled:true,revision,digest:await signature(records)};},
   sync:syncCloud,enable:enableCloud,restore:chooseCloudCopy,save,read:dbRead,due:refreshDueEntries,settled:()=>lastSync,signInCloud:cloudOnSignin,prompts:()=>consentPrompts,
+  async putGuest(records){await dbWrite('guest',strictData(records));},
   submit(){modalKind="expense";return submitModal({preventDefault(){}});},
   state(){return {profile,data,cloudMeta,cloudStatus,cloudBusy};}
  })`,context);
@@ -180,4 +181,19 @@ test("failed empty-cloud CAS never overwrites a competing device or the phone go
  assert.equal((await h.read(A)).goals[0].name,"car");
  assert.equal(h.state().cloudMeta?.enabled??false,false);
  assert.match(h.state().cloudStatus,/changed/i);
+});
+
+test("empty signed-in website retains separate guest goal instead of hiding it behind a cloud link",async()=>{
+ const h=app(),guest=records("car"),remote=records("other cloud goal");
+ guest.goals[0].saved=2000;
+ await h.init(A,core.emptyData(),null);
+ await h.putGuest(guest);
+ h.mock(async()=>({revision:3,data:remote}),async()=>assert.fail("No upload without explicit guest import"));
+ await h.signInCloud();
+ assert.equal((await h.read(A)).goals.length,0);
+ assert.equal((await h.read("guest")).goals[0].name,"car");
+ assert.equal((await h.read("guest")).goals[0].saved,2000);
+ assert.equal(h.state().cloudMeta?.enabled??false,false);
+ assert.match(h.state().cloudStatus,/guest records/i);
+ assert.equal(h.prompts().length,0);
 });
