@@ -47,3 +47,17 @@ test("web and root publishing copies match and website retains existing profiles
  assert.match(web,/indexedDB.open\("MoneyMateNZWeb",2\)/);
  assert.match(web,/if\(!req.result.objectStoreNames.contains\("profiles"\)\)/);
 });
+
+
+test("fourteen-day upcoming-money plan works on both clients without a second backend",()=>{
+ const core=read("docs/web-core.mjs");
+ const projection=read("app/src/main/java/nz/moneymate/app/FortnightPlan.java");
+ assert.match(core,/export function fortnightPlan\(data,startDate,days=14\)/);
+ assert.match(web,/fortnightPlan\(data,today\(\)\)/);
+ assert.match(web,/id="fortnight-plan"/);
+ assert.match(activity,/FortnightPlan\.calculate\(store,LocalDate\.now\(\),14\)/);
+ assert.match(projection,/FROM bills WHERE due>=\?/);
+ assert.match(projection,/FROM recurring WHERE next_date>=\?/);
+ assert.match(read("docs/account-config.json"),/efdegdlsrkxlnjgbxtep/);
+ assert.equal(read("docs/web-core.mjs"),read("web-core.mjs"));
+});
