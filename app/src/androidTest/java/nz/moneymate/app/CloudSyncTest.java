@@ -42,6 +42,28 @@ public class CloudSyncTest {
         assertNotNull(onWebsitePhone.snapshot);
         assertEquals(1,onWebsitePhone.state.revision);
     }
+    @Test public void consentedPhoneFillsOnlyAnEmptyCloudSnapshot() throws Exception {
+        String car=changed();
+        JSONObject emptyRemote=new JSONObject(empty);
+        CloudSync.Result result=CloudSync.evaluate(new CloudSync.Metadata(true,0,""),3,emptyRemote,car,
+            (expected,body)->{
+                assertEquals(3L,expected.longValue());
+                assertEquals("Food",body.optJSONArray("transactions").optJSONObject(0).optString("category"));
+                return new JSONObject(java.util.Map.of("success",true,"revision",4));
+            });
+        assertNull(result.snapshot);
+        assertEquals(4L,result.state.revision);
+        assertEquals(CloudSync.digest(car),result.state.fingerprint);
+    }
+    @Test public void emptyCloudChangedDuringUploadKeepsPhoneRecordsSafe() throws Exception {
+        String phone=changed();
+        CloudSync.Metadata state=new CloudSync.Metadata(true,0,"");
+        CloudSync.Result result=CloudSync.evaluate(state,3,new JSONObject(empty),phone,
+            (expected,body)->new JSONObject(java.util.Map.of("success",false,"revision",4)));
+        assertNull(result.snapshot);
+        assertEquals(0L,result.state.revision);
+        assertTrue(result.message.toLowerCase(java.util.Locale.ROOT).contains("conflict"));
+    }
     @Test public void differingExistingFinancialRecordsNeedManualResolution() throws Exception {
         CloudSync.Result result=CloudSync.evaluate(new CloudSync.Metadata(true,0,""),2,new JSONObject(changed()),changed(),(revision,body)->{
             fail("Existing data should never overwrite cloud");return null;
