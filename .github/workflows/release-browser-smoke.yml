@@ -1,0 +1,28 @@
+name: MoneyMate NZ live browser acceptance
+
+on:
+  pull_request:
+    paths:
+      - 'tools/release-browser-smoke.mjs'
+      - '.github/workflows/release-browser-smoke.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-guest-browser-test:
+    name: Live desktop and mobile guest flows
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install open-source browser test runner
+        run: npm install --no-save --no-package-lock --ignore-scripts playwright@1.58.0
+      - name: Install headless Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Test live MoneyMate website without cloud accounts or customer writes
+        run: node tools/release-browser-smoke.mjs
