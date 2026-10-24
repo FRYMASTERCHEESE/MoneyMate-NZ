@@ -146,7 +146,10 @@ function goals(){
  return heading("Savings goals","Make room for something good and see the progress you make.")
  +'<div class="btns">'+btn("+ New goal","goal")+'</div>'
  +(data.goals.length?'<div class="grid-2">'+data.goals.map(x=>'<section class="panel"><div class="goal-head"><h3>'+escape(x.name)+'</h3><span class="tag">'+Math.min(100,Math.round(x.saved/x.target*100))+'%</span></div><div class="muted">'+nzd(x.saved)+' saved of '+nzd(x.target)+'</div>'+progress(x.saved,x.target)+'<div class="btns">'+btn("+ Add savings","contribute","secondary",x.id)+btn("Remove","delete-goal","danger",x.id)+'</div></section>').join("")+'</div>'
- :empty("◎","Make room for something good","Create a savings goal and start tracking contributions."));
+ :empty("◎","Make room for something good","Create a savings goal and start tracking contributions."))
+ +(!data.goals.length&&auth&&!cloudMeta?.enabled
+   ?'<div class="notice warning">Signed in, but this browser has no synced goals yet. On Android, open Account, confirm it is the same Google/email account and approve automatic sync for your locally saved goals. This empty website will pick up the cloud copy automatically when you return.</div>'
+   :"");
 }
 function bills(){
  const ordered=data.bills.slice().sort((a,b)=>a.due.localeCompare(b.due));
@@ -171,7 +174,7 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on both devices, changes sync automatically when online. Conflicting edits on two offline devices require a manual choice; keep a JSON backup.</div>';
+ html+='<div class="notice warning">Your private records stay local until you approve cloud storage. An empty signed-in device can automatically join an existing cloud copy for the same account. Changes then sync while online. Conflicting edits are never silently overwritten; keep a JSON backup.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
    html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
