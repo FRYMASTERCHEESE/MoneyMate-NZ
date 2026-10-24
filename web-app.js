@@ -17,7 +17,7 @@ let profile="guest",data=emptyData(),page="home",selectedMonth=clockMonth(),auth
 let toastTimer,modalKind="",modalTarget=0;
 let adminOverview=null;
 let refreshInFlight=null;
-let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudStatus="Cloud sync is off";
+let cloudMeta=null,cloudBusy=false,cloudPending=false,cloudDiscoveryBusy=false,lastCloudProbe=0,cloudStatus="Cloud sync is off";
 let profileEpoch=0;
 let financialSaving=false;
 let profileReady=false;
@@ -60,12 +60,13 @@ async function save(next){
  if(profileEpoch!==epoch)return;
  render();
  if(cloudMeta?.enabled&&auth?.user?.id===owner){cloudStatus="Saved locally · cloud check pending";void syncCloud(false);}
+ else if(auth?.user?.id===owner&&!cloudMeta?.offered)void cloudOnSignin(true);
 }
 async function switchOwner(id){
  profileReady=false;
  const epoch=++profileEpoch,owner=id||"guest";
  editor.close();
- profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;
+ profile=id||"guest";cloudMeta=null;cloudStatus="Cloud sync is off";cloudPending=false;lastCloudProbe=0;
  const stored=await dbRead(owner);
  if(profileEpoch!==epoch)return;
  const result=recordDue(stored,today());
@@ -145,7 +146,10 @@ function goals(){
  return heading("Savings goals","Make room for something good and see the progress you make.")
  +'<div class="btns">'+btn("+ New goal","goal")+'</div>'
  +(data.goals.length?'<div class="grid-2">'+data.goals.map(x=>'<section class="panel"><div class="goal-head"><h3>'+escape(x.name)+'</h3><span class="tag">'+Math.min(100,Math.round(x.saved/x.target*100))+'%</span></div><div class="muted">'+nzd(x.saved)+' saved of '+nzd(x.target)+'</div>'+progress(x.saved,x.target)+'<div class="btns">'+btn("+ Add savings","contribute","secondary",x.id)+btn("Remove","delete-goal","danger",x.id)+'</div></section>').join("")+'</div>'
- :empty("◎","Make room for something good","Create a savings goal and start tracking contributions."));
+ :empty("◎","Make room for something good","Create a savings goal and start tracking contributions."))
+ +(!data.goals.length&&auth&&!cloudMeta?.enabled
+   ?'<div class="notice warning">Signed in, but this browser has no synced goals yet. On Android, open Account, confirm it is the same Google/email account and approve automatic sync for your locally saved goals. This empty website will pick up the cloud copy automatically when you return.</div>'
+   :"");
 }
 function bills(){
  const ordered=data.bills.slice().sort((a,b)=>a.due.localeCompare(b.due));
@@ -170,7 +174,7 @@ function exportPage(){
 }
 function accountPage(){
  let html=heading("Your MoneyMate account","Sign in or use a local guest profile. Your personal financial data stays in this browser.");
- html+='<div class="notice warning">Your records stay local until you enable secure cloud sync. Once enabled on both devices, changes sync automatically when online. Conflicting edits on two offline devices require a manual choice; keep a JSON backup.</div>';
+ html+='<div class="notice warning">Your private records stay local until you approve cloud storage. An empty signed-in device can automatically join an existing cloud copy for the same account. Changes then sync while online. Conflicting edits are never silently overwritten; keep a JSON backup.</div>';
  if(!config)html+='<div class="notice">Connecting to secure account service… If unavailable, local budgeting still works.</div>';
  if(auth){
    html+='<div class="panel"><h2>Signed in</h2><p class="muted">'+escape(auth.user.email)+'</p><span class="tag">This browser profile</span><p class="muted" style="margin-top:14px">Financial records belong to your signed-in profile. Cloud syncing is optional.</p>'
@@ -796,27 +800,62 @@ async function cloudCommit(revision,backup,owner=auth?.user?.id) {
  if(typeof result.success!=="boolean"||!Number.isSafeInteger(result.revision))throw Error("Cloud save returned an invalid reply.");
  return result;
 }
-async function cloudOnSignin() {
+async function cloudOnSignin(force=false) {
  const owner=auth?.user?.id,epoch=profileEpoch;
- if(!owner)return;
- const metadata=await dbSyncMeta(owner)||null;
- if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
- cloudMeta=metadata;
- if(cloudMeta?.enabled){await syncCloud(false);return;}
+ if(!owner||cloudBusy||cloudDiscoveryBusy||(!force&&lastCloudProbe&&Date.now()-lastCloudProbe<60000))return;
+ cloudDiscoveryBusy=true;lastCloudProbe=Date.now();
  try {
+  const metadata=await dbSyncMeta(owner)||null;
+  if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch)return;
+  cloudMeta=metadata;
+  if(cloudMeta?.enabled){await syncCloud(false);return;}
   const remote=await cloudRead();
-  if(auth?.user?.id!==owner||profile!==owner)return;
+  if(auth?.user?.id!==owner||profile!==owner||profileEpoch!==epoch)return;
+  // Existing consent on another device allows an EMPTY account profile to join.
+  // Never upload financial records or discard populated local profiles silently.
+  if(remote.revision>0&&localEmpty(data)&&remote.data){
+   // Keep any guest records in their own local profile. The account's EMPTY
+   // profile can safely load its existing cloud copy without touching guests.
+   // This is important when the account already has goals online.
+   const guest=await dbRead("guest");
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   const guestHasRecords=!localEmpty(guest);
+   const baseline=strictData(data),restored=strictData(remote.data);
+   const hash=await signature(restored);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch||JSON.stringify(data)!==JSON.stringify(baseline))return;
+   const linked={enabled:true,revision:remote.revision,digest:hash};
+   // Atomic saved-data, recovery-copy and metadata write, guarded against late edits.
+   await dbWrite(owner,restored,{expected:baseline,recovery:true,metadata:linked,
+    current:()=>auth?.user?.id===owner&&profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   data=restored;cloudMeta=linked;
+   cloudStatus="Automatically linked this device to your existing cloud records."+
+    (guestHasRecords?" Your separate local guest records are preserved and have not been merged.":"");
+   render();return;
+  }
   cloudStatus=remote.revision>0?
-    "Cloud copy available. Export a JSON backup, then tap Enable secure cloud sync to use it on this device.":
-    "Cloud sync is off. Enable it to share your finances across devices.";
+   "Different local and cloud records detected. Export a JSON backup, then enable sync to review the conflict.":
+   "Automatic syncing is available after you approve cloud storage for this account.";
+  render();
+  // Ask just once, and only if actual financial data could be uploaded.
+  if(!metadata?.offered&&!localEmpty(data)){
+   const offered={enabled:false,revision:0,digest:"",offered:true};
+   await dbSyncMeta(owner,offered);
+   if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+   cloudMeta=offered;
+   const approved=window.confirm("Automatically sync MoneyMate NZ on your signed-in devices? This stores your financial records on your private Supabase account in Sydney, Australia. Existing records will NOT be overwritten if they conflict. Keep a JSON backup. Turn on automatic sync?");
+   if(approved&&auth?.user?.id===owner&&profileEpoch===epoch)await enableCloud(true);
+   else render();
+  }
  }catch{
-  cloudStatus="Cloud status unavailable. Your local financial records remain safe.";
- }
- render();
+  if(auth?.user?.id===owner&&profileEpoch===epoch){
+   cloudStatus="Cloud check unavailable. Your local financial records are unchanged.";render();
+  }
+ }finally{cloudDiscoveryBusy=false;}
 }
-async function enableCloud() {
+async function enableCloud(preApproved=false) {
  if(!auth)return;
- if(!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
+ if(!preApproved&&!window.confirm("Enable MoneyMate NZ cloud sync? Your budgets, transactions, goals and bills will be stored on Supabase servers in Australia under your private account. Keep a full JSON backup first. Continue?"))return;
  if(cloudBusy)return;
  cloudBusy=true;
  try{
@@ -826,7 +865,16 @@ async function enableCloud() {
   if(profileEpoch!==epoch||await signature(data)!==localHash)throw Error("Records changed while enabling sync. Please retry.");
   if(remote.revision>0){
    const remoteData=strictData(remote.data);
-   if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
+   if(localEmpty(remoteData)&&!localEmpty(data)){
+    // A website can create an EMPTY cloud copy before the phone uploads its goal.
+    // After consent, fill only that empty copy using the observed server revision.
+    const result=await cloudCommit(remote.revision,baseline,owner);
+    if(auth?.user?.id!==owner||profileEpoch!==epoch)return;
+    if(!result.success){cloudStatus="Cloud records changed before setup. Both copies are safe; retry sync.";render();return;}
+    cloudMeta={enabled:true,revision:result.revision,digest:localHash};
+    cloudStatus="Your local records replaced an empty cloud backup. Automatic sync is active.";
+    if(await signature(data)!==localHash)cloudPending=true;
+   }else if(localEmpty(data)||JSON.stringify(remoteData)===JSON.stringify(strictData(data))){
     const metadata={enabled:true,revision:remote.revision,digest:await signature(remoteData)};
     await dbWrite(owner,remoteData,{expected:baseline,recovery:true,metadata,current:()=>profileEpoch===epoch&&JSON.stringify(data)===JSON.stringify(baseline)});
     if(profileEpoch!==epoch)return;
@@ -930,10 +978,11 @@ async function foregroundRefresh(){
  if(document.visibilityState!=="visible")return;
  await refreshDueEntries();
  if(auth&&cloudMeta?.enabled)void syncCloud(false);
+ else if(auth&&!cloudDiscoveryBusy&&Date.now()-lastCloudProbe>60000)void cloudOnSignin(false);
 }
 document.addEventListener("visibilitychange",()=>{void foregroundRefresh();});
 
-window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);});
+window.addEventListener("online",()=>{if(auth&&cloudMeta?.enabled)void syncCloud(false);else if(auth)void cloudOnSignin(true);});
 setInterval(()=>{void foregroundRefresh();},45000);
 async function copyGuest(){
  if(!auth)return;
