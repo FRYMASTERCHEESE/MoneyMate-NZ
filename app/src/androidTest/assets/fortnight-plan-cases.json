@@ -1,0 +1,550 @@
+[
+  {
+    "name": "NZ fortnight and inclusive end date",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [
+        {
+          "id": 1,
+          "name": "Power",
+          "cents": 5000,
+          "due": "2026-11-07"
+        },
+        {
+          "id": 2,
+          "name": "Phone",
+          "cents": 2500,
+          "due": "2026-10-25"
+        },
+        {
+          "id": 3,
+          "name": "Overdue",
+          "cents": 1500,
+          "due": "2026-10-24"
+        },
+        {
+          "id": 4,
+          "name": "Later",
+          "cents": 4000,
+          "due": "2026-11-08"
+        }
+      ],
+      "recurring": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Pay",
+          "note": "",
+          "cents": 25000,
+          "next_date": "2026-10-26",
+          "frequency": "Weekly"
+        },
+        {
+          "id": 2,
+          "kind": "Expense",
+          "category": "Groceries",
+          "note": "",
+          "cents": 4000,
+          "next_date": "2026-10-28",
+          "frequency": "Fortnightly"
+        },
+        {
+          "id": 3,
+          "kind": "Expense",
+          "category": "Internet",
+          "note": "",
+          "cents": 10000,
+          "next_date": "2026-11-01",
+          "frequency": "Monthly"
+        }
+      ]
+    },
+    "start": "2026-10-25",
+    "days": 14,
+    "expected": {
+      "start": "2026-10-25",
+      "end": "2026-11-07",
+      "incoming": 50000,
+      "outgoing": 21500,
+      "net": 28500,
+      "events": [
+        {
+          "date": "2026-10-25",
+          "type": "Bill",
+          "name": "Phone",
+          "kind": "Expense",
+          "cents": 2500
+        },
+        {
+          "date": "2026-10-26",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 25000
+        },
+        {
+          "date": "2026-10-28",
+          "type": "Repeating",
+          "name": "Groceries",
+          "kind": "Expense",
+          "cents": 4000
+        },
+        {
+          "date": "2026-11-01",
+          "type": "Repeating",
+          "name": "Internet",
+          "kind": "Expense",
+          "cents": 10000
+        },
+        {
+          "date": "2026-11-02",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 25000
+        },
+        {
+          "date": "2026-11-07",
+          "type": "Bill",
+          "name": "Power",
+          "kind": "Expense",
+          "cents": 5000
+        }
+      ]
+    }
+  },
+  {
+    "name": "Monthly leap-day clamp over 31 days",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [],
+      "recurring": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Pay",
+          "note": "",
+          "cents": 10000,
+          "next_date": "2028-01-31",
+          "frequency": "Monthly"
+        }
+      ]
+    },
+    "start": "2028-01-30",
+    "days": 31,
+    "expected": {
+      "start": "2028-01-30",
+      "end": "2028-02-29",
+      "incoming": 20000,
+      "outgoing": 0,
+      "net": 20000,
+      "events": [
+        {
+          "date": "2028-01-31",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 10000
+        },
+        {
+          "date": "2028-02-29",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 10000
+        }
+      ]
+    }
+  },
+  {
+    "name": "Already-posted and past-due entries are not projected again",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Expense",
+          "category": "Rent",
+          "note": "Already posted by normal catch-up",
+          "cents": 1000,
+          "date": "2026-10-25"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [],
+      "recurring": [
+        {
+          "id": 1,
+          "kind": "Expense",
+          "category": "Rent",
+          "note": "",
+          "cents": 1000,
+          "next_date": "2026-11-01",
+          "frequency": "Weekly"
+        },
+        {
+          "id": 2,
+          "kind": "Income",
+          "category": "Old salary",
+          "note": "",
+          "cents": 100000,
+          "next_date": "2026-10-24",
+          "frequency": "Fortnightly"
+        }
+      ]
+    },
+    "start": "2026-10-25",
+    "days": 14,
+    "expected": {
+      "start": "2026-10-25",
+      "end": "2026-11-07",
+      "incoming": 0,
+      "outgoing": 1000,
+      "net": -1000,
+      "events": [
+        {
+          "date": "2026-11-01",
+          "type": "Repeating",
+          "name": "Rent",
+          "kind": "Expense",
+          "cents": 1000
+        }
+      ]
+    }
+  },
+  {
+    "name": "Bill and recurrence remain two explicit obligations",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [
+        {
+          "id": 1,
+          "name": "Rent",
+          "cents": 20000,
+          "due": "2026-10-25"
+        }
+      ],
+      "recurring": [
+        {
+          "id": 1,
+          "kind": "Expense",
+          "category": "Rent",
+          "note": "",
+          "cents": 20000,
+          "next_date": "2026-10-25",
+          "frequency": "Fortnightly"
+        }
+      ]
+    },
+    "start": "2026-10-25",
+    "days": 14,
+    "expected": {
+      "start": "2026-10-25",
+      "end": "2026-11-07",
+      "incoming": 0,
+      "outgoing": 40000,
+      "net": -40000,
+      "events": [
+        {
+          "date": "2026-10-25",
+          "type": "Bill",
+          "name": "Rent",
+          "kind": "Expense",
+          "cents": 20000
+        },
+        {
+          "date": "2026-10-25",
+          "type": "Repeating",
+          "name": "Rent",
+          "kind": "Expense",
+          "cents": 20000
+        }
+      ]
+    }
+  },
+  {
+    "name": "Weekly dates cross the year boundary",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [],
+      "recurring": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Pay",
+          "note": "",
+          "cents": 100,
+          "next_date": "2026-12-25",
+          "frequency": "Weekly"
+        }
+      ]
+    },
+    "start": "2026-12-25",
+    "days": 14,
+    "expected": {
+      "start": "2026-12-25",
+      "end": "2027-01-07",
+      "incoming": 200,
+      "outgoing": 0,
+      "net": 200,
+      "events": [
+        {
+          "date": "2026-12-25",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 100
+        },
+        {
+          "date": "2027-01-01",
+          "type": "Repeating",
+          "name": "Pay",
+          "kind": "Income",
+          "cents": 100
+        }
+      ]
+    }
+  },
+  {
+    "name": "Empty schedules preserve saved goals budgets and dated transactions",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [],
+      "recurring": []
+    },
+    "start": "2026-10-25",
+    "days": 1,
+    "expected": {
+      "start": "2026-10-25",
+      "end": "2026-10-25",
+      "incoming": 0,
+      "outgoing": 0,
+      "net": 0,
+      "events": []
+    }
+  },
+  {
+    "name": "Totals beyond exact integer cents fail without writes",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [
+        {
+          "id": 1,
+          "name": "A",
+          "cents": 9007199254740991,
+          "due": "2026-10-25"
+        },
+        {
+          "id": 2,
+          "name": "B",
+          "cents": 1,
+          "due": "2026-10-25"
+        }
+      ],
+      "recurring": []
+    },
+    "start": "2026-10-25",
+    "days": 14,
+    "error": "too large"
+  },
+  {
+    "name": "Planning windows longer than 31 days fail without writes",
+    "data": {
+      "format": "MoneyMateNZ",
+      "version": 1,
+      "transactions": [
+        {
+          "id": 1,
+          "kind": "Income",
+          "category": "Wages",
+          "note": "Already recorded, not another scheduled payment",
+          "cents": 90000,
+          "date": "2026-10-26"
+        }
+      ],
+      "budgets": [
+        {
+          "category": "Groceries",
+          "cents": 30000
+        }
+      ],
+      "goals": [
+        {
+          "id": 1,
+          "name": "Emergency fund",
+          "target": 100000,
+          "saved": 12345
+        }
+      ],
+      "bills": [],
+      "recurring": []
+    },
+    "start": "2026-10-25",
+    "days": 32,
+    "error": "Invalid planning window"
+  }
+]

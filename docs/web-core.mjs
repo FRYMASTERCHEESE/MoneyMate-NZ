@@ -119,3 +119,49 @@ export function monthlyPlan(data,yyyyMm) {
  return {budgetRemaining,billsDue:bills.reduce((sum,b)=>sum+b.cents,0),billCount:bills.length,
    completedGoals:data.goals.filter(g=>g.saved>=g.target).length};
 }
+
+
+/**
+ * An upcoming cash-flow planning view, NOT a bank-balance forecast.
+ * Only unpaid bills and explicitly scheduled repeating entries are counted.
+ * Today's previously posted repeating entries are absent because recordDue
+ * advances their next_date before the dashboard renders. Older unposted
+ * recurrences are excluded rather than silently counted as future income.
+ * If a user enters the same payment as both a bill and recurrence it appears
+ * twice, by design, until the user reconciles those schedules.
+ */
+export function fortnightPlan(data,startDate,days=14) {
+  const start=iso(startDate);
+  if(!Number.isSafeInteger(days)||days<1||days>31)throw Error("Invalid planning window.");
+  const closing=new Date(start+"T00:00:00Z");
+  closing.setUTCDate(closing.getUTCDate()+days-1);
+  const end=closing.toISOString().slice(0,10);
+  const events=[];
+  for(const bill of data.bills) {
+    if(iso(bill.due)>=start&&bill.due<=end)
+      events.push({date:bill.due,type:"Bill",name:bill.name,kind:"Expense",cents:bill.cents});
+  }
+  for(const entry of data.recurring) {
+    let date=iso(entry.next_date);
+    if(date<start)continue; // Past-due postings are processed separately.
+    let safety=0;
+    while(date<=end) {
+      if(++safety>6)throw Error("Repeating plan has too many dates.");
+      events.push({date,type:"Repeating",name:entry.category,kind:entry.kind,cents:entry.cents});
+      date=advance(date,entry.frequency);
+    }
+  }
+  events.sort((a,b)=>a.date.localeCompare(b.date)||a.type.localeCompare(b.type)||a.name.localeCompare(b.name));
+  let incoming=0,outgoing=0;
+  for(const event of events) {
+    if(!Number.isSafeInteger(event.cents)||event.cents<=0)throw Error("Invalid planned amount.");
+    if(event.kind==="Income")incoming+=event.cents;
+    else if(event.kind==="Expense")outgoing+=event.cents;
+    else throw Error("Invalid planned direction.");
+    if(!Number.isSafeInteger(incoming)||!Number.isSafeInteger(outgoing))
+      throw Error("Planned amount is too large.");
+  }
+  const net=incoming-outgoing;
+  if(!Number.isSafeInteger(net))throw Error("Planned amount is too large.");
+  return {start,end,incoming,outgoing,net,events};
+}

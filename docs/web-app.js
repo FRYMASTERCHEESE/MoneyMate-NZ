@@ -1,6 +1,6 @@
 import {planBankCsv} from "./bank-csv.mjs";
 import {pdfStatementToCsv,pdfFileToLines} from "./pdf-statement.mjs";
-import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,monthlyPlan,csv,CATEGORIES} from "./web-core.mjs";
+import {emptyData,strictData,cents,nzd,iso,month,nextId,recordDue,totals,monthlyPlan,fortnightPlan,csv,CATEGORIES} from "./web-core.mjs";
 import {normalizeLoginSession,sessionInvalidated,loadLoginSession,saveLoginSession,clearLoginSession} from "./auth-session.mjs";
 import {decideSync} from "./sync-policy.mjs";
 import {writeProfile} from "./profile-store.mjs";
@@ -103,6 +103,20 @@ function home(){
  markup+='<div class="plan-grid"><section class="plan-card"><span class="plan-icon" aria-hidden="true">▤</span><p>Category budgets</p><strong>'+nzd(plan.budgetRemaining)+'</strong><small>'+ (data.budgets.length?"Remaining across your budgeted categories":"Set a monthly budget to start")+'</small></section>'
   +'<section class="plan-card"><span class="plan-icon gold" aria-hidden="true">▦</span><p>Bills due this month</p><strong>'+nzd(plan.billsDue)+'</strong><small>'+plan.billCount+' unpaid · not deducted from cash flow</small></section>'
   +'<section class="plan-card"><span class="plan-icon purple" aria-hidden="true">◎</span><p>Savings goals</p><strong>'+plan.completedGoals+' / '+data.goals.length+'</strong><small>Goals reached · track progress in Goals</small></section></div>';
+ // PocketSmith-style forward planning, but no bank balance or future payment claims.
+ const outlook=fortnightPlan(data,today());
+ markup+='<section class="panel" id="fortnight-plan" style="margin-top:20px" aria-label="Your next fourteen days">'
+   +'<div class="section-row"><div><h2>Next 14 days</h2><p class="muted">A look ahead at the bills and repeating entries you scheduled.</p></div><span class="tag">NZ fortnight</span></div>'
+   +'<div class="plan-grid"><div class="plan-card"><span class="plan-icon" aria-hidden="true">↗</span><p>Scheduled income</p><strong>'+nzd(outlook.incoming)+'</strong><small>Not received yet</small></div>'
+   +'<div class="plan-card"><span class="plan-icon gold" aria-hidden="true">↘</span><p>Planned outgoings</p><strong>'+nzd(outlook.outgoing)+'</strong><small>Unpaid bills + repeating expenses</small></div>'
+   +'<div class="plan-card"><span class="plan-icon purple" aria-hidden="true">≈</span><p>Planned difference</p><strong>'+nzd(outlook.net)+'</strong><small>Scheduled income minus planned outgoings</small></div></div>';
+ if(outlook.events.length) {
+  markup+='<h3 style="margin:20px 0 12px">On the horizon</h3><div class="rows">'
+   +outlook.events.slice(0,6).map(e=>'<div class="entry"><div class="entry-text"><div class="entry-title">'+escape(e.name)+'</div><div class="entry-sub">'+escape(prettyDate(e.date))+' · '+escape(e.type)+'</div></div><div class="entry-end amount '+(e.kind==="Income"?"positive":"negative")+'">'+(e.kind==="Income"?"+":"−")+nzd(e.cents)+'</div></div>').join("")
+   +'</div>';
+  if(outlook.events.length>6)markup+='<p class="muted">And '+(outlook.events.length-6)+' more scheduled entries in this fortnight.</p>';
+ }else markup+=empty("▦","Nothing scheduled yet","Add unpaid bills or repeating income and expenses to see your fortnight ahead.");
+ markup+='<p class="muted" style="margin-top:14px">Planning estimate only — not your bank balance or a payment promise. A bill also entered as a repeating expense appears twice; check your schedules.</p></section>';
  markup+='<div class="grid-2"><section class="panel"><h2>Spending categories</h2>';
  if(!t.categories.length)markup+=empty("◉","Make spending visible","Add an expense to see your spending chart.");
  else{
