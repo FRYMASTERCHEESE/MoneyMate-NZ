@@ -9,6 +9,11 @@
 # infer those external uses when compiling the app; retain their signatures in
 # this variant while allowing method-body optimisation. Do not copy to release.
 -keep,allowoptimization class nz.moneymate.app.Store { *; }
+# The forecast tests cross the same APK boundary, including returned DTO fields.
+# Retain only this test API; production still shrinks/renames/inlines it normally.
+-keep,allowoptimization class nz.moneymate.app.FortnightPlan { *; }
+-keep,allowoptimization class nz.moneymate.app.FortnightPlan$Event { *; }
+-keep,allowoptimization class nz.moneymate.app.FortnightPlan$Summary { *; }
 -keep,allowoptimization class nz.moneymate.app.SessionVault { *; }
 -keep,allowoptimization class nz.moneymate.app.AuthClient { *; }
 -keep,allowoptimization class nz.moneymate.app.AuthClient$* { *; }

@@ -45,7 +45,7 @@ for phase in before after; do
   grep -E 'versionCode=|versionName=|lastUpdateTime=' "${prefix}-${phase}-com.google.android.gms.txt" || echo 'No version metadata captured'
 done
 echo 'OCR and Play services lifecycle events:'
-grep -E 'MoneyMateOcr|started: syntheticPdf|finished: syntheticPdf|failed: syntheticPdf|OCR model|Force stopping com.google.android.gms.*(installPackageLI|pkg removed)|Package com.google.android.gms updated, version' "${prefix}-logcat.txt" || echo 'No matching diagnostic lifecycle events captured'
+grep -E 'MoneyMateOcr|(started|finished|failed): synthetic(Anz)?Pdf|OCR model|Force stopping com.google.android.gms.*(installPackageLI|pkg removed)|Package com.google.android.gms updated, version|Killing .*nz[.]moneymate[.]app.*depends on provider com[.]google[.]android[.]gms|FATAL EXCEPTION|Fatal signal' "${prefix}-logcat.txt" || echo 'No matching diagnostic lifecycle events captured'
 printf '%s\n' "$test_status" > "${prefix}-exit-status.txt"
 # Preserve the real test result, including timeouts and module-install failures.
 exit "$test_status"

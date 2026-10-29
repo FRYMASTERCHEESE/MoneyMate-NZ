@@ -15,6 +15,53 @@ import static org.junit.Assert.*;
 public class FortnightPlanTest {
     private static final String OWNER="4fb391fe-9128-498d-b607-ab81e59b42f1";
 
+    @Test public void SharedWebFixturesMatchEveryTotalAndEventWithoutWrites() throws Exception {
+        Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
+        org.json.JSONArray fixtures;
+        try(java.io.InputStream input=InstrumentationRegistry.getInstrumentation().getContext()
+                .getAssets().open("fortnight-plan-cases.json")) {
+            java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
+            byte[] buffer=new byte[4096];int count;
+            while((count=input.read(buffer))!=-1)bytes.write(buffer,0,count);
+            fixtures=new org.json.JSONArray(new String(bytes.toByteArray(),java.nio.charset.StandardCharsets.UTF_8));
+        }
+        for(int i=0;i<fixtures.length();i++) {
+            org.json.JSONObject fixture=fixtures.getJSONObject(i);
+            String label=fixture.getString("name");
+            ctx.deleteDatabase(Store.databaseName(OWNER));
+            try(Store store=new Store(ctx,OWNER)) {
+                // Only the isolated synthetic account is seeded. The calculation is read-only.
+                store.restoreJson(fixture.getJSONObject("data").toString());
+                String before=store.backupJson();
+                LocalDate start=LocalDate.parse(fixture.getString("start"));
+                int days=fixture.getInt("days");
+                if(fixture.has("error")) {
+                    assertThrows(label,IllegalArgumentException.class,()->FortnightPlan.calculate(store,start,days));
+                }else{
+                    FortnightPlan.Summary actual=FortnightPlan.calculate(store,start,days);
+                    org.json.JSONObject expected=fixture.getJSONObject("expected");
+                    assertEquals(label,expected.getString("start"),actual.start.toString());
+                    assertEquals(label,expected.getString("end"),actual.end.toString());
+                    assertEquals(label,expected.getLong("incoming"),actual.incoming);
+                    assertEquals(label,expected.getLong("outgoing"),actual.outgoing);
+                    assertEquals(label,expected.getLong("net"),actual.net);
+                    org.json.JSONArray events=expected.getJSONArray("events");
+                    assertEquals(label,events.length(),actual.events.size());
+                    for(int j=0;j<events.length();j++) {
+                        org.json.JSONObject event=events.getJSONObject(j);
+                        FortnightPlan.Event entry=actual.events.get(j);
+                        assertEquals(label,event.getString("date"),entry.date.toString());
+                        assertEquals(label,event.getString("type"),entry.type);
+                        assertEquals(label,event.getString("name"),entry.name);
+                        assertEquals(label,event.getString("kind"),entry.kind);
+                        assertEquals(label,event.getLong("cents"),entry.cents);
+                    }
+                }
+                assertEquals(label,before,store.backupJson());
+            }finally{ctx.deleteDatabase(Store.databaseName(OWNER));}
+        }
+    }
+
     @Test public void NZFortnightIncludesScheduledPaydaysAndUnpaidBillsWithoutDatabaseWrites() throws Exception {
         Context ctx=InstrumentationRegistry.getInstrumentation().getTargetContext();
         ctx.deleteDatabase(Store.databaseName(OWNER));
